@@ -391,7 +391,6 @@ export default function AccountsPage() {
                   <TableRow key={user?.user_id || user?.id || index} index={index}>
                     <TableCell 
                       className="font-sans text-xs text-text-primary dark:text-[#e5e7eb] font-medium min-w-[120px] whitespace-nowrap"
-                      style={{ color: 'inherit' }}
                     >
                       {user?.user_id || user?.id || 'N/A'}
                     </TableCell>
