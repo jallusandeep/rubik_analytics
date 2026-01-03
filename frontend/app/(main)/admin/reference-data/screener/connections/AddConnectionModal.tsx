@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -132,9 +132,8 @@ export function AddConnectionModal({ isOpen, onClose, onSuccess }: AddConnection
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
-        MozBackdropFilter: 'blur(12px)',
         zIndex: 10000,
-      }}
+      } as React.CSSProperties}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose()
