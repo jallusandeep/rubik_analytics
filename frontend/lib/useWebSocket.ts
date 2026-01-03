@@ -64,7 +64,7 @@ export function useWebSocketStatus(
       const ws = new WebSocket(wsUrl)
 
       ws.onopen = () => {
-        console.log('[WebSocket] Connected')
+        // WebSocket connection logs suppressed
         isConnectingRef.current = false
         setIsConnected(true)
         setError(null)
@@ -96,7 +96,7 @@ export function useWebSocketStatus(
       }
 
       ws.onclose = () => {
-        console.log('[WebSocket] Disconnected')
+        // WebSocket disconnection logs suppressed
         isConnectingRef.current = false
         setIsConnected(false)
         wsRef.current = null
@@ -104,14 +104,10 @@ export function useWebSocketStatus(
         // Attempt to reconnect if we haven't exceeded max attempts
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current++
-          console.log(
-            `[WebSocket] Reconnecting in ${reconnectDelay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`
-          )
           reconnectTimeoutRef.current = setTimeout(() => {
             connect()
           }, reconnectDelay)
         } else {
-          console.log('[WebSocket] Max reconnect attempts reached. WebSocket disabled.')
           setError(new Error('WebSocket connection failed after multiple attempts'))
         }
       }

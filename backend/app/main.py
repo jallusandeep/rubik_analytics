@@ -1,12 +1,61 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone, timedelta
+import logging
+import logging.config
+import sys
+
+# Configure logging to suppress ONLY WebSocket access logs
+# Keep all other normal logs (HTTP requests, application logs, etc.)
 from app.api.v1 import auth, users, admin, connections, websocket, symbols, screener, announcements
 from app.core.config import settings
 from app.core.database import get_connection_manager, get_db_router
 
 # IST timezone (UTC+5:30)
 IST = timezone(timedelta(hours=5, minutes=30))
+
+# Configure logging to suppress ONLY WebSocket connection logs
+# This filter will prevent WebSocket connection logs from appearing while keeping all other logs
+class WebSocketLogFilter(logging.Filter):
+    """Filter to suppress only WebSocket connection logs, keep all other logs"""
+    def filter(self, record):
+        # Only suppress logs that are specifically WebSocket connection messages
+        message = record.getMessage()
+        message_lower = message.lower()
+        
+        # Suppress WebSocket connection acceptance logs (e.g., "WebSocket /api/v1/ws?token=... [accepted]")
+        if "websocket" in message_lower:
+            if "/ws" in message_lower or "/api/v1/ws" in message_lower:
+                return False
+            if "[accepted]" in message_lower or "accepted" in message_lower:
+                return False
+        
+        # Suppress standalone "connection open" and "connection closed" messages
+        # These come from WebSocket protocol and don't contain "websocket" in the text
+        if "connection open" in message_lower:
+            return False
+        if "connection closed" in message_lower:
+            return False
+        
+        # Keep all other logs (HTTP requests, application logs, errors, etc.)
+        return True
+
+# Apply filter to uvicorn access logger (where WebSocket connection logs come from)
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.addFilter(WebSocketLogFilter())
+
+# Apply filter to uvicorn protocol loggers for WebSocket-specific messages
+for ws_logger_name in ["uvicorn.protocols.websockets", "uvicorn.protocols.websockets.websockets_impl",
+                       "uvicorn.protocols.websockets.impl", "uvicorn.protocols", "uvicorn.error"]:
+    ws_logger = logging.getLogger(ws_logger_name)
+    ws_logger.addFilter(WebSocketLogFilter())
+
+# Apply filter to root logger to catch any WebSocket logs from other sources
+logging.getLogger().addFilter(WebSocketLogFilter())
+
+# Note: WebSocket connection logs are suppressed via WebSocketLogFilter above.
+# This filter only suppresses WebSocket connection logs (keeps HTTP requests and all other logs).
+# Normal application logs, HTTP request logs, errors, and startup messages are all preserved.
 
 app = FastAPI(
     title="Rubik Analytics API",
@@ -28,7 +77,25 @@ app.add_middleware(
 # Note: CORS middleware should handle CORS headers automatically
 # Exception handlers are only needed if CORS middleware fails to add headers
 
-# Initialize database connections on startup
+# Configure logging at startup - runs before any requests
+@app.on_event("startup")
+async def configure_logging():
+    """Configure logging to suppress only WebSocket connection logs - runs early in startup"""
+    # Apply WebSocket filter to all relevant loggers (keeps HTTP and other logs)
+    loggers_to_filter = [
+        "uvicorn.access",
+        "uvicorn.error",
+        "uvicorn.protocols.websockets",
+        "uvicorn.protocols.websockets.websockets_impl",
+        "uvicorn.protocols.websockets.impl",
+        "uvicorn.protocols",
+        ""  # root logger
+    ]
+    for logger_name in loggers_to_filter:
+        logger = logging.getLogger(logger_name)
+        if not any(isinstance(f, WebSocketLogFilter) for f in logger.filters):
+            logger.addFilter(WebSocketLogFilter())
+
 # Initialize database connections on startup
 @app.on_event("startup")
 async def startup_event():

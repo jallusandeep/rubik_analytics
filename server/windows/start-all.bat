@@ -143,6 +143,7 @@ set "BACKEND_DIR=%PROJECT_ROOT%\backend"
 set "FRONTEND_DIR=%PROJECT_ROOT%\frontend"
 
 REM Start backend server directly
+REM Note: WebSocket connection logs are filtered in main.py, but HTTP access logs are kept
 start "Rubik Backend" cmd /k "cd /d "%BACKEND_DIR%" && call venv\Scripts\activate.bat && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
 
 timeout /t 5 /nobreak >nul
