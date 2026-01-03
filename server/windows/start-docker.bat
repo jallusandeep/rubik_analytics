@@ -7,11 +7,11 @@ echo.
 cd /d "%~dp0"
 
 echo [INFO] Stopping existing servers...
-call server\windows\stop-all.bat >nul 2>&1
+call stop-all.bat >nul 2>&1
 
 echo.
 echo [INFO] Building and starting Docker containers...
-cd server\docker
+cd ..\docker
 docker-compose down
 docker-compose up --build -d
 
