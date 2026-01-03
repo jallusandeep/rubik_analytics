@@ -1,0 +1,28 @@
+# Docker ignore file - Source of truth: server/docker/backend.dockerignore and frontend.dockerignore
+# This file combines patterns for both backend and frontend builds
+
+# Backend patterns (from server/docker/backend.dockerignore)
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+*.db
+*.sqlite
+*.duckdb
+
+# Frontend patterns (from server/docker/frontend.dockerignore)
+node_modules
+.next
+.env*.local
+
+# Common patterns
+.git
+.gitignore
+README.md
+data/
+server/windows/
+docs/

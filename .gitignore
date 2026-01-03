@@ -45,9 +45,6 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
-# Docker
-.dockerignore
-
 # Data directories (contains databases, logs, temp files - should not be in git)
 data/
 Data/
