@@ -19,10 +19,15 @@ class Settings(BaseSettings):
     # Encryption (Fernet key for encrypting connection credentials)
     # Generate a new key with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     # IMPORTANT: Change this in production! Store in .env file as ENCRYPTION_KEY
-    ENCRYPTION_KEY: str = "-zvS8bDaaYPj2qyeuZxkKYKq6npYXC5GuBwnWUJsyck="
+    # Note: Fernet keys must be valid base64url-encoded strings (44 characters, no leading/trailing dashes)
+    ENCRYPTION_KEY: str = "jT7ACJPNHdp-IwKWVDto-vohgPGxwP_95sjBlgsr9Eg="
     
     # CORS - can be comma-separated string or list
     CORS_ORIGINS: Union[str, List[str]] = "http://localhost:3000"
+    
+    # TrueData Connection Defaults
+    TRUEDATA_DEFAULT_AUTH_URL: str = "https://auth.truedata.in/token"
+    TRUEDATA_DEFAULT_WEBSOCKET_PORT: str = "8086"
     
     @property
     def cors_origins_list(self) -> List[str]:

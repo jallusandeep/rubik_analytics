@@ -3,10 +3,12 @@ services:
     build:
       context: ../..
       dockerfile: server/docker/backend.Dockerfile
-    container_name: rubik-backend
+    container_name: rubik-backend-dev
     ports:
       - "8000:8000"
     environment:
+      # Development mode flag - enables auto-reload
+      - DEV_MODE=true
       # Data directory configuration
       - DATA_DIR=/app/data
       - DATABASE_URL=sqlite:////app/data/auth/sqlite/auth.db
@@ -24,13 +26,14 @@ services:
       # CORS - allow frontend container and localhost
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://frontend:3000,http://127.0.0.1:3000,http://rubik-frontend:3000}
       # TrueData Connection Defaults (configurable via environment variables)
-      # These defaults are used when creating new TrueData connections if URL/port are not specified
-      # Can be overridden by setting environment variables or editing connection in UI
       - TRUEDATA_DEFAULT_AUTH_URL=${TRUEDATA_DEFAULT_AUTH_URL:-https://auth.truedata.in/token}
       - TRUEDATA_DEFAULT_WEBSOCKET_PORT=${TRUEDATA_DEFAULT_WEBSOCKET_PORT:-8086}
     volumes:
+      # Bind mount entire backend directory for code hot-reload
+      # Changes to .py files will trigger automatic reload
+      - ../../backend:/app/backend
       # Mount entire data directory for multi-database support
-      # Path is relative to docker-compose.yml location (server/docker/)
+      # Path is relative to docker-compose.dev.yml location (server/docker/)
       - ../../data:/app/data
     restart: unless-stopped
     networks:
@@ -41,19 +44,26 @@ services:
       timeout: 10s
       start_period: 30s
       retries: 3
+    # Optional: Docker Compose Watch (if supported by your Docker version)
+    develop:
+      watch:
+        - action: sync
+          path: ../../backend
+          target: /app/backend
+        - action: rebuild
+          path: ../../backend/requirements.txt
 
   frontend:
     build:
       context: ../..
       dockerfile: server/docker/frontend.Dockerfile
-    container_name: rubik-frontend
+    container_name: rubik-frontend-dev
     ports:
       - "3000:3000"
     environment:
       # API URL - use backend container name for inter-container communication
-      # For browser requests, this should be the external URL
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-      - NODE_ENV=production
+      - NODE_ENV=development
     depends_on:
       backend:
         condition: service_healthy
@@ -70,3 +80,4 @@ services:
 networks:
   rubik-network:
     driver: bridge
+

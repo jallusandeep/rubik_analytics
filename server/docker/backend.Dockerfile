@@ -52,6 +52,12 @@ WORKDIR /app/backend
 # Fix line endings for all scripts and app files
 RUN find . -type f -name "*.py" -exec dos2unix {} +
 
+# Copy and setup entrypoint script for dev/prod mode switching
+# Place it outside /app/backend to avoid being overwritten by bind mounts in dev mode
+COPY server/docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh && \
+    dos2unix /app/entrypoint.sh
 
-# Use shell form to allow for proper signal handling and initialization
-CMD ["sh", "-c", "python scripts/init/init_auth_database.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --no-access-log"]
+# Use entrypoint script
+WORKDIR /app/backend
+CMD ["/app/entrypoint.sh"]
