@@ -5,21 +5,25 @@ import { Card } from '@/components/ui/Card'
 import { Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell } from '@/components/ui/Table'
 import { RefreshButton } from '@/components/ui/RefreshButton'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { announcementsAPI } from '@/lib/api'
-import { RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react'
+import { RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, X, Download } from 'lucide-react'
 
 interface Announcement {
-  id: string
-  tradedate: string
-  company_name: string
-  headline: string
-  news_sub: string
-  news_body: string
+  announcement_id: string
+  symbol: string
   symbol_nse: string
   symbol_bse: string
-  descriptor: string
+  exchange: string
+  headline: string
+  description: string
+  category: string
+  announcement_datetime: string
   received_at: string
-  created_at: string
+  attachment_id: string | null
+  company_name: string | null
+  price?: number
+  price_change?: number
 }
 
 
@@ -33,15 +37,19 @@ export default function DashboardPage() {
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   
+  // Search state
+  const [search, setSearch] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  
   // Expanded rows state
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   // Fetch announcements from DuckDB
-  const fetchAnnouncements = useCallback(async (currentPage: number = page, currentPageSize: number = pageSize) => {
+  const fetchAnnouncements = useCallback(async (currentPage: number = page, currentPageSize: number = pageSize, searchTerm?: string) => {
     setLoading(true)
     try {
       const offset = (currentPage - 1) * currentPageSize
-      const response = await announcementsAPI.getAnnouncements(currentPageSize, offset)
+      const response = await announcementsAPI.getAnnouncements(currentPageSize, offset, searchTerm || searchQuery)
       setAnnouncements(response.announcements || [])
       setTotal(response.total || 0)
       setTotalPages(Math.ceil((response.total || 0) / currentPageSize))
@@ -53,7 +61,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize])
+  }, [page, pageSize, searchQuery])
 
   // Initial load when announcements tab is active
   useEffect(() => {
@@ -61,6 +69,49 @@ export default function DashboardPage() {
       fetchAnnouncements(1, pageSize)
     }
   }, [activeTab])
+
+  // Handle search
+  const handleSearchChange = (val: string) => {
+    setSearch(val)
+  }
+
+  const handleSearchClick = () => {
+    setSearchQuery(search)
+    setPage(1)
+    fetchAnnouncements(1, pageSize, search)
+  }
+
+  const handleClearSearch = () => {
+    setSearch('')
+    setSearchQuery('')
+    setPage(1)
+    fetchAnnouncements(1, pageSize, '')
+  }
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSearchClick()
+    }
+  }
+
+  // Handle attachment download
+  const handleDownloadAttachment = async (announcementId: string) => {
+    try {
+      const blob = await announcementsAPI.downloadAttachment(announcementId)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `announcement_${announcementId}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Error downloading attachment:', error)
+      alert('Failed to download attachment. Please try again.')
+    }
+  }
 
   // Handle page change
   const handlePageChange = (newPage: number) => {
@@ -302,17 +353,48 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-sans font-semibold text-text-primary">
-                Corporate Announcements
+                Latest Corporate Announcements
               </h2>
             </div>
             <RefreshButton
               variant="secondary"
               onClick={async () => {
-                await fetchAnnouncements(page, pageSize)
+                await fetchAnnouncements(page, pageSize, searchQuery)
               }}
               size="sm"
               disabled={loading}
             />
+          </div>
+
+          {/* Search Box */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 max-w-md">
+              <Input
+                type="text"
+                placeholder="Search by symbol, company name, or headline..."
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                className="pl-10 pr-10"
+              />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text-secondary" />
+              {search && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text-secondary hover:text-text-primary"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSearchClick}
+              disabled={loading}
+            >
+              Search
+            </Button>
           </div>
 
           <Card compact>
@@ -330,34 +412,35 @@ export default function DashboardPage() {
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableHeaderCell className="w-36">Date</TableHeaderCell>
+                      <TableHeaderCell className="w-36">Date & Time</TableHeaderCell>
                       <TableHeaderCell className="w-40">Company</TableHeaderCell>
                       <TableHeaderCell className="w-32">Symbol</TableHeaderCell>
                       <TableHeaderCell className="min-w-[400px]">Headline</TableHeaderCell>
-                      <TableHeaderCell className="w-32">Descriptor</TableHeaderCell>
-                      <TableHeaderCell className="w-12">{'\u00A0'}</TableHeaderCell>
+                      <TableHeaderCell className="w-32">Category</TableHeaderCell>
+                      <TableHeaderCell className="w-24">Actions</TableHeaderCell>
                     </TableHeader>
                     <TableBody>
                       {announcements.map((announcement, index) => {
-                        const isExpanded = expandedRows.has(announcement.id)
+                        const isExpanded = expandedRows.has(announcement.announcement_id)
+                        const isFirstRow = index === 0
                         return (
-                          <TableRow key={announcement.id} index={index}>
+                          <TableRow key={announcement.announcement_id} index={index}>
                             <TableCell className="text-sm">
                               {(() => {
-                                const tradeDate = formatDate(announcement.tradedate)
+                                const annDate = formatDateTime(announcement.announcement_datetime || announcement.received_at)
                                 const receivedDate = formatDateTime(announcement.received_at)
                                 
-                                if (tradeDate || receivedDate) {
+                                if (annDate || receivedDate) {
                                   return (
                                     <div>
-                                      {tradeDate && (
+                                      {annDate && (
                                         <div className="font-medium text-text-primary">
-                                          {tradeDate}
+                                          {annDate}
                                         </div>
                                       )}
-                                      {receivedDate && (
+                                      {receivedDate && receivedDate !== annDate && (
                                         <div className="text-xs text-text-secondary mt-0.5">
-                                          {receivedDate}
+                                          Received: {receivedDate}
                                         </div>
                                       )}
                                     </div>
@@ -367,7 +450,21 @@ export default function DashboardPage() {
                               })()}
                             </TableCell>
                             <TableCell className="text-sm text-text-primary">
-                              {announcement.company_name || '-'}
+                              <div>
+                                <div className="font-medium">{announcement.company_name || '-'}</div>
+                                {isFirstRow && (announcement.price !== undefined || announcement.price_change !== undefined) && (
+                                  <div className="text-xs mt-1">
+                                    {announcement.price !== undefined && (
+                                      <span className="text-text-primary">₹{announcement.price.toFixed(2)}</span>
+                                    )}
+                                    {announcement.price_change !== undefined && (
+                                      <span className={`ml-2 ${announcement.price_change >= 0 ? 'text-success' : 'text-error'}`}>
+                                        {announcement.price_change >= 0 ? '+' : ''}{announcement.price_change.toFixed(2)}%
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="text-sm">
                               <div className="flex flex-col gap-1">
@@ -384,27 +481,38 @@ export default function DashboardPage() {
                             </TableCell>
                             <TableCell className="text-sm text-text-primary">
                               <div className="font-medium">{announcement.headline || '-'}</div>
-                              {announcement.news_sub && (
-                                <div className="text-xs text-text-secondary mt-1">{announcement.news_sub}</div>
+                              {announcement.description && (
+                                <div className="text-xs text-text-secondary mt-1 line-clamp-2">{announcement.description}</div>
                               )}
                             </TableCell>
                             <TableCell className="text-sm text-text-secondary">
-                              {announcement.descriptor || '-'}
+                              {announcement.category || '-'}
                             </TableCell>
                             <TableCell>
-                              {announcement.news_body && (
-                                <button
-                                  onClick={() => toggleRowExpansion(announcement.id)}
-                                  className="p-1 hover:bg-background/50 rounded transition-colors"
-                                  title={isExpanded ? 'Collapse' : 'Expand'}
-                                >
-                                  {isExpanded ? (
-                                    <ChevronUp className="w-4 h-4 text-text-secondary" />
-                                  ) : (
-                                    <ChevronDown className="w-4 h-4 text-text-secondary" />
-                                  )}
-                                </button>
-                              )}
+                              <div className="flex items-center gap-1">
+                                {announcement.description && (
+                                  <button
+                                    onClick={() => toggleRowExpansion(announcement.announcement_id)}
+                                    className="p-1 hover:bg-background/50 rounded transition-colors"
+                                    title={isExpanded ? 'Collapse' : 'Expand'}
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronUp className="w-4 h-4 text-text-secondary" />
+                                    ) : (
+                                      <ChevronDown className="w-4 h-4 text-text-secondary" />
+                                    )}
+                                  </button>
+                                )}
+                                {announcement.attachment_id && (
+                                  <button
+                                    onClick={() => handleDownloadAttachment(announcement.announcement_id)}
+                                    className="p-1 hover:bg-background/50 rounded transition-colors"
+                                    title="Download attachment"
+                                  >
+                                    <Download className="w-4 h-4 text-text-secondary" />
+                                  </button>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         )
@@ -415,14 +523,14 @@ export default function DashboardPage() {
 
                 {/* Expanded content */}
                 {announcements.map((announcement) => {
-                  if (!expandedRows.has(announcement.id) || !announcement.news_body) return null
+                  if (!expandedRows.has(announcement.announcement_id) || !announcement.description) return null
                   return (
                     <div
-                      key={`expanded-${announcement.id}`}
+                      key={`expanded-${announcement.announcement_id}`}
                       className="border-t border-border bg-background/30 p-4"
                     >
                       <div className="text-sm text-text-secondary whitespace-pre-wrap">
-                        {announcement.news_body}
+                        {announcement.description}
                       </div>
                     </div>
                   )
