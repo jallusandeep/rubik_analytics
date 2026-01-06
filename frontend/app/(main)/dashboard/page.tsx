@@ -7,7 +7,7 @@ import { RefreshButton } from '@/components/ui/RefreshButton'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { announcementsAPI } from '@/lib/api'
-import { RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, X, Download } from 'lucide-react'
+import { RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, X, Download, ExternalLink } from 'lucide-react'
 
 interface Announcement {
   announcement_id: string
@@ -36,14 +36,14 @@ export default function DashboardPage() {
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
-  
+
   // Search state
   const [search, setSearch] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  
+
   // Expanded rows state
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-  
+
   // Live update state
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null)
   const [newAnnouncementsCount, setNewAnnouncementsCount] = useState(0)
@@ -72,25 +72,25 @@ export default function DashboardPage() {
         // Use searchQuery from state (fallback)
         effectiveSearchTerm = searchQuery && searchQuery.trim() ? searchQuery.trim() : undefined
       }
-      
-      console.log('[Announcements] Fetching:', { 
-        page: currentPage, 
-        pageSize: currentPageSize, 
-        offset, 
+
+      console.log('[Announcements] Fetching:', {
+        page: currentPage,
+        pageSize: currentPageSize,
+        offset,
         search: effectiveSearchTerm,
         searchQuery,
-        searchTerm 
+        searchTerm
       })
-      
+
       const response = await announcementsAPI.getAnnouncements(currentPageSize, offset, effectiveSearchTerm)
       const newAnnouncements = response.announcements || []
-      
-      console.log('[Announcements] Response:', { 
-        count: newAnnouncements.length, 
+
+      console.log('[Announcements] Response:', {
+        count: newAnnouncements.length,
         total: response.total,
         hasData: newAnnouncements.length > 0
       })
-      
+
       // Debug: Log sample data to check symbols and company names
       if (newAnnouncements.length > 0) {
         console.log('[Announcements] Sample announcement:', {
@@ -103,7 +103,7 @@ export default function DashboardPage() {
           headline: newAnnouncements[0].headline?.substring(0, 50)
         })
       }
-      
+
       // Check for new announcements (only on first page and when not searching)
       if (currentPage === 1 && !effectiveSearchTerm && newAnnouncements.length > 0) {
         const latestId = newAnnouncements[0].announcement_id
@@ -123,12 +123,12 @@ export default function DashboardPage() {
           lastAnnouncementIdRef.current = latestId
         }
       }
-      
+
       // Update the reference if we're on first page without search
       if (currentPage === 1 && !effectiveSearchTerm && newAnnouncements.length > 0 && !lastAnnouncementIdRef.current) {
         lastAnnouncementIdRef.current = newAnnouncements[0].announcement_id
       }
-      
+
       setAnnouncements(newAnnouncements)
       setTotal(response.total || 0)
       setTotalPages(Math.ceil((response.total || 0) / currentPageSize))
@@ -151,7 +151,7 @@ export default function DashboardPage() {
       }
     }
   }, [page, pageSize, searchQuery])
-  
+
   // Keep ref updated with latest fetch function
   useEffect(() => {
     fetchAnnouncementsRef.current = fetchAnnouncements
@@ -175,7 +175,7 @@ export default function DashboardPage() {
       clearInterval(pollingIntervalRef.current)
       pollingIntervalRef.current = null
     }
-    
+
     // Start polling only when on announcements tab, first page, and no search
     if (activeTab === 'announcements' && page === 1 && !searchQuery) {
       // Poll every 10 seconds for new announcements
@@ -184,7 +184,7 @@ export default function DashboardPage() {
           fetchAnnouncementsRef.current(1, pageSize, undefined, true) // Silent fetch
         }
       }, 10000) // 10 seconds
-      
+
       return () => {
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current)
@@ -219,7 +219,7 @@ export default function DashboardPage() {
     setPage(1)
     // Reset the last announcement ID reference when clearing search
     lastAnnouncementIdRef.current = null
-    
+
     // Force fetch with empty string - this will be converted to undefined in fetchAnnouncements
     // We pass empty string explicitly to override any stale searchQuery in the closure
     fetchAnnouncements(1, pageSize, '', false)
@@ -236,7 +236,7 @@ export default function DashboardPage() {
   const handleDownloadAttachment = async (announcementId: string) => {
     try {
       const response = await announcementsAPI.downloadAttachment(announcementId)
-      
+
       // Extract filename from Content-Disposition header if available
       let filename = `announcement_${announcementId}.pdf`
       try {
@@ -260,7 +260,7 @@ export default function DashboardPage() {
         // If header parsing fails, use default filename
         console.debug('Could not parse filename from headers:', headerError)
       }
-      
+
       const blob = response.data instanceof Blob ? response.data : new Blob([response.data])
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -394,21 +394,19 @@ export default function DashboardPage() {
       {/* Tabs */}
       <div className="flex gap-4 border-b border-[#1f2a44] mb-6">
         <button
-          className={`pb-2 px-1 text-sm font-medium transition-colors ${
-            activeTab === 'overview' 
-              ? 'text-primary border-b-2 border-primary' 
-              : 'text-text-secondary hover:text-text-primary'
-          }`}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${activeTab === 'overview'
+            ? 'text-primary border-b-2 border-primary'
+            : 'text-text-secondary hover:text-text-primary'
+            }`}
           onClick={() => setActiveTab('overview')}
         >
           Overview
         </button>
         <button
-          className={`pb-2 px-1 text-sm font-medium transition-colors ${
-            activeTab === 'announcements' 
-              ? 'text-primary border-b-2 border-primary' 
-              : 'text-text-secondary hover:text-text-primary'
-          }`}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${activeTab === 'announcements'
+            ? 'text-primary border-b-2 border-primary'
+            : 'text-text-secondary hover:text-text-primary'
+            }`}
           onClick={() => setActiveTab('announcements')}
         >
           Latest Corporate Announcements
@@ -419,94 +417,94 @@ export default function DashboardPage() {
       {activeTab === 'overview' && (
         <>
           {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card compact>
-          <div className="space-y-1">
-            <p className="text-xs font-sans text-text-secondary uppercase tracking-wider">Total Symbols</p>
-            <p className="text-xl font-sans font-semibold text-text-primary">1,234</p>
-            <p className="text-[10px] font-sans text-success">+12% from last month</p>
-          </div>
-        </Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Card compact>
+              <div className="space-y-1">
+                <p className="text-xs font-sans text-text-secondary uppercase tracking-wider">Total Symbols</p>
+                <p className="text-xl font-sans font-semibold text-text-primary">1,234</p>
+                <p className="text-[10px] font-sans text-success">+12% from last month</p>
+              </div>
+            </Card>
 
-        <Card compact>
-          <div className="space-y-1">
-            <p className="text-xs font-sans text-text-secondary uppercase tracking-wider">Active Signals</p>
-            <p className="text-xl font-sans font-semibold text-text-primary">89</p>
-            <p className="text-[10px] font-sans text-success">+5 new today</p>
-          </div>
-        </Card>
+            <Card compact>
+              <div className="space-y-1">
+                <p className="text-xs font-sans text-text-secondary uppercase tracking-wider">Active Signals</p>
+                <p className="text-xl font-sans font-semibold text-text-primary">89</p>
+                <p className="text-[10px] font-sans text-success">+5 new today</p>
+              </div>
+            </Card>
 
-        <Card compact>
-          <div className="space-y-1">
-            <p className="text-xs font-sans text-text-secondary uppercase tracking-wider">ML Models</p>
-            <p className="text-xl font-sans font-semibold text-text-primary">12</p>
-            <p className="text-[10px] font-sans text-text-secondary">All active</p>
-          </div>
-        </Card>
+            <Card compact>
+              <div className="space-y-1">
+                <p className="text-xs font-sans text-text-secondary uppercase tracking-wider">ML Models</p>
+                <p className="text-xl font-sans font-semibold text-text-primary">12</p>
+                <p className="text-[10px] font-sans text-text-secondary">All active</p>
+              </div>
+            </Card>
 
-        <Card compact>
-          <div className="space-y-1">
-            <p className="text-xs font-sans text-text-secondary uppercase tracking-wider">Accuracy</p>
-            <p className="text-xl font-sans font-semibold text-text-primary">87.5%</p>
-            <p className="text-[10px] font-sans text-success">+2.3% improvement</p>
+            <Card compact>
+              <div className="space-y-1">
+                <p className="text-xs font-sans text-text-secondary uppercase tracking-wider">Accuracy</p>
+                <p className="text-xl font-sans font-semibold text-text-primary">87.5%</p>
+                <p className="text-[10px] font-sans text-success">+2.3% improvement</p>
+              </div>
+            </Card>
           </div>
-        </Card>
-      </div>
 
-      {/* Data Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card title="Recent Activity" compact>
-          <Table>
-            <TableHeader>
-              <TableHeaderCell>Event</TableHeaderCell>
-              <TableHeaderCell className="text-right">Time</TableHeaderCell>
-            </TableHeader>
-            <TableBody>
-              <TableRow index={0}>
-                <TableCell>New signal generated</TableCell>
-                <TableCell numeric className="text-text-secondary">2h ago</TableCell>
-              </TableRow>
-              <TableRow index={1}>
-                <TableCell>AAPL - Buy signal</TableCell>
-                <TableCell numeric className="text-text-secondary">2h ago</TableCell>
-              </TableRow>
-              <TableRow index={2}>
-                <TableCell>Model updated</TableCell>
-                <TableCell numeric className="text-text-secondary">5h ago</TableCell>
-              </TableRow>
-              <TableRow index={3}>
-                <TableCell>RSI Indicator v2.1</TableCell>
-                <TableCell numeric className="text-text-secondary">5h ago</TableCell>
-              </TableRow>
-              <TableRow index={4}>
-                <TableCell>Data sync completed</TableCell>
-                <TableCell numeric className="text-text-secondary">1d ago</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </Card>
+          {/* Data Tables */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card title="Recent Activity" compact>
+              <Table>
+                <TableHeader>
+                  <TableHeaderCell>Event</TableHeaderCell>
+                  <TableHeaderCell className="text-right">Time</TableHeaderCell>
+                </TableHeader>
+                <TableBody>
+                  <TableRow index={0}>
+                    <TableCell>New signal generated</TableCell>
+                    <TableCell numeric className="text-text-secondary">2h ago</TableCell>
+                  </TableRow>
+                  <TableRow index={1}>
+                    <TableCell>AAPL - Buy signal</TableCell>
+                    <TableCell numeric className="text-text-secondary">2h ago</TableCell>
+                  </TableRow>
+                  <TableRow index={2}>
+                    <TableCell>Model updated</TableCell>
+                    <TableCell numeric className="text-text-secondary">5h ago</TableCell>
+                  </TableRow>
+                  <TableRow index={3}>
+                    <TableCell>RSI Indicator v2.1</TableCell>
+                    <TableCell numeric className="text-text-secondary">5h ago</TableCell>
+                  </TableRow>
+                  <TableRow index={4}>
+                    <TableCell>Data sync completed</TableCell>
+                    <TableCell numeric className="text-text-secondary">1d ago</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </Card>
 
-        <Card title="System Status" compact>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between py-1.5 border-b border-border-subtle">
-              <span className="text-xs font-sans text-text-secondary">Backend API</span>
-              <span className="text-xs font-sans text-success">ONLINE</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5 border-b border-border-subtle">
-              <span className="text-xs font-sans text-text-secondary">Database</span>
-              <span className="text-xs font-sans text-success">CONNECTED</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5 border-b border-border-subtle">
-              <span className="text-xs font-sans text-text-secondary">Analytics Engine</span>
-              <span className="text-xs font-sans text-success">ACTIVE</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5">
-              <span className="text-xs font-sans text-text-secondary">Last Sync</span>
-              <span className="text-xs font-sans text-text-secondary">12:34:56</span>
-            </div>
+            <Card title="System Status" compact>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between py-1.5 border-b border-border-subtle">
+                  <span className="text-xs font-sans text-text-secondary">Backend API</span>
+                  <span className="text-xs font-sans text-success">ONLINE</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5 border-b border-border-subtle">
+                  <span className="text-xs font-sans text-text-secondary">Database</span>
+                  <span className="text-xs font-sans text-success">CONNECTED</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5 border-b border-border-subtle">
+                  <span className="text-xs font-sans text-text-secondary">Analytics Engine</span>
+                  <span className="text-xs font-sans text-success">ACTIVE</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5">
+                  <span className="text-xs font-sans text-text-secondary">Last Sync</span>
+                  <span className="text-xs font-sans text-text-secondary">12:34:56</span>
+                </div>
+              </div>
+            </Card>
           </div>
-        </Card>
-      </div>
         </>
       )}
 
@@ -616,7 +614,6 @@ export default function DashboardPage() {
                       <TableHeaderCell className="min-w-[400px] max-w-none">Headline</TableHeaderCell>
                       <TableHeaderCell className="w-32">Category</TableHeaderCell>
                       <TableHeaderCell className="w-32">Attachment</TableHeaderCell>
-                      <TableHeaderCell className="w-16">Actions</TableHeaderCell>
                     </TableHeader>
                     <TableBody>
                       {announcements.map((announcement, index) => {
@@ -628,7 +625,7 @@ export default function DashboardPage() {
                               {(() => {
                                 const annDate = formatDateTime(announcement.announcement_datetime || announcement.received_at)
                                 const receivedDate = formatDateTime(announcement.received_at)
-                                
+
                                 if (annDate || receivedDate) {
                                   return (
                                     <div>
@@ -675,28 +672,44 @@ export default function DashboardPage() {
                                 {announcement.symbol_bse && announcement.symbol_bse.trim() && (
                                   <span className="font-mono text-xs text-primary">BSE: {announcement.symbol_bse}</span>
                                 )}
-                                {announcement.symbol && announcement.symbol.trim() && 
-                                 (!announcement.symbol_nse || !announcement.symbol_nse.trim()) && 
-                                 (!announcement.symbol_bse || !announcement.symbol_bse.trim()) && (
-                                  <span className="font-mono text-xs text-primary">{announcement.symbol}</span>
-                                )}
-                                {(!announcement.symbol_nse || !announcement.symbol_nse.trim()) && 
-                                 (!announcement.symbol_bse || !announcement.symbol_bse.trim()) && 
-                                 (!announcement.symbol || !announcement.symbol.trim()) && (
-                                  <span className="text-xs text-text-secondary">-</span>
-                                )}
+                                {announcement.symbol && announcement.symbol.trim() &&
+                                  (!announcement.symbol_nse || !announcement.symbol_nse.trim()) &&
+                                  (!announcement.symbol_bse || !announcement.symbol_bse.trim()) && (
+                                    <span className="font-mono text-xs text-primary">{announcement.symbol}</span>
+                                  )}
+                                {(!announcement.symbol_nse || !announcement.symbol_nse.trim()) &&
+                                  (!announcement.symbol_bse || !announcement.symbol_bse.trim()) &&
+                                  (!announcement.symbol || !announcement.symbol.trim()) && (
+                                    <span className="text-xs text-text-secondary">-</span>
+                                  )}
                               </div>
                             </TableCell>
                             <TableCell className="text-sm text-text-primary">
                               <div>
+                                {announcement.attachment_id &&
+                                  announcement.attachment_id.trim() &&
+                                  announcement.attachment_id.trim() !== '' &&
+                                  announcement.attachment_id.trim() toLowerCase() !== 'null' &&
+                                announcement.attachment_id.trim().toLowerCase() !== 'none' ? (
+                                <button
+                                  onClick={() => handleDownloadAttachment(announcement.announcement_id)}
+                                  className="font-medium break-words whitespace-normal overflow-wrap-anywhere text-left hover:text-primary transition-colors cursor-pointer group flex items-start gap-1.5 w-full"
+                                  title="Click to download attachment"
+                                >
+                                  <span className="group-hover:underline">
+                                    {announcement.headline && announcement.headline.trim() ? announcement.headline : '-'}
+                                  </span>
+                                  <ExternalLink className="w-3.5 h-3.5 text-primary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5" />
+                                </button>
+                                ) : (
                                 <div className="font-medium break-words whitespace-normal overflow-wrap-anywhere">
                                   {announcement.headline && announcement.headline.trim() ? announcement.headline : '-'}
                                 </div>
+                                )}
                                 {announcement.description && (
                                   <div className="mt-1">
-                                    <div className={`text-xs text-text-secondary transition-all duration-200 ${
-                                      isExpanded ? 'whitespace-pre-wrap' : 'line-clamp-2'
-                                    }`}>
+                                    <div className={`text-xs text-text-secondary transition-all duration-200 ${isExpanded ? 'whitespace-pre-wrap' : 'line-clamp-2'
+                                      }`}>
                                       {announcement.description}
                                     </div>
                                     <button
@@ -727,11 +740,11 @@ export default function DashboardPage() {
                               {announcement.category || '-'}
                             </TableCell>
                             <TableCell className="text-sm">
-                              {announcement.attachment_id && 
-                               announcement.attachment_id.trim() && 
-                               announcement.attachment_id.trim() !== '' &&
-                               announcement.attachment_id.trim().toLowerCase() !== 'null' &&
-                               announcement.attachment_id.trim().toLowerCase() !== 'none' ? (
+                              {announcement.attachment_id &&
+                                announcement.attachment_id.trim() &&
+                                announcement.attachment_id.trim() !== '' &&
+                                announcement.attachment_id.trim().toLowerCase() !== 'null' &&
+                                announcement.attachment_id.trim().toLowerCase() !== 'none' ? (
                                 <button
                                   onClick={() => handleDownloadAttachment(announcement.announcement_id)}
                                   className="text-primary hover:text-primary/80 hover:underline flex items-center gap-1.5 transition-colors"
@@ -743,9 +756,6 @@ export default function DashboardPage() {
                               ) : (
                                 <span className="text-xs text-text-secondary">-</span>
                               )}
-                            </TableCell>
-                            <TableCell className="w-16">
-                              {/* Actions column - expand button moved to headline column */}
                             </TableCell>
                           </TableRow>
                         )
