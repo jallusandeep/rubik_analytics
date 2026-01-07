@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell } from '@/components/ui/Table'
 import { Button } from '@/components/ui/Button'
 import { announcementsAPI } from '@/lib/api'
+import { useWebSocketStatus } from '@/lib/useWebSocket'
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Eye, Download, AlertCircle, Radio } from 'lucide-react'
 
 interface Link {
@@ -61,23 +62,45 @@ export default function AnnouncementsPage() {
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
 
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Establish WebSocket connection for real-time updates
+  useWebSocketStatus()
 
   useEffect(() => {
     loadAnnouncements()
-    
-    // Auto-refresh every 10 seconds
-    refreshIntervalRef.current = setInterval(() => {
-      loadAnnouncements()
-    }, 10000) // 10 seconds
-
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current)
-      }
-    }
+    // Auto-refresh removed - using real-time WebSocket updates instead
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize])
+
+  // Listen for real-time announcement updates via WebSocket
+  useEffect(() => {
+    const handleAnnouncementUpdate = (event: CustomEvent) => {
+      const newAnnouncement = event.detail
+      if (newAnnouncement && newAnnouncement.id) {
+        // Add new announcement to the beginning of the list
+        setAnnouncements(prev => {
+          // Check if announcement already exists (avoid duplicates)
+          const exists = prev.some(ann => ann.id === newAnnouncement.id)
+          if (!exists) {
+            // Only add if we're on the first page
+            if (page === 1) {
+              return [newAnnouncement, ...prev]
+            }
+          }
+          return prev
+        })
+        // Update last refresh time
+        setLastRefresh(new Date())
+      }
+    }
+    
+    // Add event listener for announcement updates
+    window.addEventListener('announcementUpdate', handleAnnouncementUpdate as EventListener)
+    
+    return () => {
+      // Cleanup: remove event listener
+      window.removeEventListener('announcementUpdate', handleAnnouncementUpdate as EventListener)
+    }
+  }, [page])
 
   // Close links menu when clicking outside
   useEffect(() => {
