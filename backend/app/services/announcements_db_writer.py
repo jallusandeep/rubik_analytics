@@ -416,12 +416,13 @@ class AnnouncementsDBWriter:
                     
                     # Additional check: If headline and symbol match, consider it a duplicate
                     # This prevents the most common type of duplicate (same company announcement)
-                    symbol_value = message.get("symbol_nse") or message.get("symbol_bse") or message.get("symbol")
+                    # Use COALESCE to treat NULL symbols as empty string for comparison
+                    symbol_value = message.get("symbol_nse") or message.get("symbol_bse") or message.get("symbol") or ""
                     if headline:
                         existing_by_content = conn.execute("""
                             SELECT announcement_id FROM corporate_announcements 
                             WHERE headline = ? 
-                              AND COALESCE(symbol_nse, symbol_bse, symbol) = ?
+                              AND COALESCE(symbol_nse, symbol_bse, symbol, '') = ?
                             LIMIT 1
                         """, [headline, symbol_value]).fetchone()
                         
