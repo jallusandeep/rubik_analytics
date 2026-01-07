@@ -311,6 +311,9 @@ class AnnouncementsService:
                 announcement.get("date_of_meeting")
             ])
             
+            # DuckDB auto-commits, but we can ensure it's committed immediately
+            # No explicit commit needed for DuckDB, but closing connection ensures persistence
+            
             return True
         except Exception as e:
             logger.error(f"Error inserting announcement: {e}", exc_info=True)

@@ -83,22 +83,36 @@ class WebSocketManager:
             self.disconnect(connection)
     
     async def broadcast_announcement(self, announcement: dict):
-        """Broadcast new announcement to all connected clients"""
+        """Broadcast new announcement to all connected clients - optimized for speed"""
         message = {
             "type": "announcement_update",
             "event": "new_announcement",
             "announcement": announcement
         }
         
-        # Broadcast to all connected clients
+        # Broadcast to all connected clients in parallel for maximum speed
         disconnected = set()
+        tasks = []
+        
+        # Collect all connections first
+        all_connections = []
         for user_connections in self.active_connections.values():
-            for connection in user_connections:
-                try:
-                    await connection.send_json(message)
-                except Exception as e:
-                    print(f"[WebSocket] Error broadcasting announcement: {e}")
-                    disconnected.add(connection)
+            all_connections.extend(user_connections)
+        
+        # Create send tasks for all connections (parallel execution)
+        async def send_to_connection(conn):
+            try:
+                await conn.send_json(message)
+            except Exception as e:
+                print(f"[WebSocket] Error broadcasting announcement: {e}")
+                disconnected.add(conn)
+        
+        for connection in all_connections:
+            tasks.append(send_to_connection(connection))
+        
+        # Execute all sends in parallel
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         
         # Clean up disconnected connections
         for connection in disconnected:
