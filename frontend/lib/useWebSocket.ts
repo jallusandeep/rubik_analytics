@@ -20,17 +20,30 @@ export interface UserStatusUpdate {
   last_active_at?: string | null
 }
 
+export interface AnnouncementUpdate {
+  id: string
+  trade_date?: string
+  symbol_nse?: string
+  symbol_bse?: string
+  company_name?: string
+  news_headline?: string
+  descriptor_name?: string
+  announcement_type?: string
+  [key: string]: any
+}
+
 interface UseWebSocketStatusReturn {
   isConnected: boolean
   error: Error | null
 }
 
 /**
- * Hook to manage WebSocket connection for real-time user status updates
+ * Hook to manage WebSocket connection for real-time user status updates and announcements
  * Falls back gracefully if WebSocket is not available
  */
 export function useWebSocketStatus(
-  onStatusUpdate?: (update: UserStatusUpdate) => void
+  onStatusUpdate?: (update: UserStatusUpdate) => void,
+  onAnnouncement?: (announcement: AnnouncementUpdate) => void
 ): UseWebSocketStatusReturn {
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -44,6 +57,9 @@ export function useWebSocketStatus(
   // Use ref for callback to avoid dependency issues
   const onStatusUpdateRef = useRef(onStatusUpdate)
   onStatusUpdateRef.current = onStatusUpdate
+  
+  const onAnnouncementRef = useRef(onAnnouncement)
+  onAnnouncementRef.current = onAnnouncement
 
   const connect = useCallback(() => {
     // Prevent multiple simultaneous connection attempts
@@ -83,6 +99,13 @@ export function useWebSocketStatus(
               last_active_at: data.last_active_at || data.lastActiveAt || null,
             }
             onStatusUpdateRef.current?.(update)
+          }
+          // Handle new announcements
+          else if (data.type === 'announcement' || data.event === 'new_announcement') {
+            const announcement: AnnouncementUpdate = data.data || data
+            if (announcement && announcement.id) {
+              onAnnouncementRef.current?.(announcement)
+            }
           }
         } catch (err) {
           console.warn('[WebSocket] Failed to parse message:', err)

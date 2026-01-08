@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell } from '@/components/ui/Table'
 import { announcementsAPI } from '@/lib/api'
+import { useWebSocketStatus, AnnouncementUpdate } from '@/lib/useWebSocket'
 
 interface Announcement {
   id: string
@@ -29,6 +30,35 @@ export function CorporateAnnouncementsPanel() {
   const [error, setError] = useState<string | null>(null)
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+
+  // Handle real-time announcements from WebSocket
+  const handleNewAnnouncement = (newAnnouncement: AnnouncementUpdate) => {
+    // Convert AnnouncementUpdate to Announcement format
+    const announcement: Announcement = {
+      id: newAnnouncement.id,
+      trade_date: newAnnouncement.trade_date,
+      symbol_nse: newAnnouncement.symbol_nse,
+      symbol_bse: newAnnouncement.symbol_bse,
+      company_name: newAnnouncement.company_name,
+      news_headline: newAnnouncement.news_headline,
+      descriptor_name: newAnnouncement.descriptor_name,
+      announcement_type: newAnnouncement.announcement_type,
+    }
+
+    // Add to the beginning of the list (most recent first)
+    setAnnouncements((prev) => {
+      // Check if announcement already exists (avoid duplicates)
+      const exists = prev.some((ann) => ann.id === announcement.id)
+      if (exists) {
+        return prev
+      }
+      // Insert at the beginning
+      return [announcement, ...prev]
+    })
+  }
+
+  // Connect to WebSocket for real-time updates
+  useWebSocketStatus(undefined, handleNewAnnouncement)
 
   useEffect(() => {
     loadAnnouncements()

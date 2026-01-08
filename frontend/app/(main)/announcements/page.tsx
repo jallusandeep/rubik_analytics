@@ -573,10 +573,24 @@ export default function AnnouncementsPage() {
                 type="date"
                 value={searchFromDateInput}
                 onChange={(e) => setSearchFromDateInput(e.target.value)}
-                className="px-3 py-2 pr-8 text-sm border border-border rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 [color-scheme:light]"
+                className="px-3 py-2 pr-8 text-sm border border-border rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 [color-scheme:light] [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                style={{
+                  WebkitAppearance: 'none',
+                  MozAppearance: 'textfield'
+                } as React.CSSProperties}
                 title="From Date"
+                id="from-date-input"
               />
-              <Calendar className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              <label
+                htmlFor="from-date-input"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 cursor-pointer z-10 pointer-events-auto"
+                onClick={(e) => {
+                  e.preventDefault()
+                  document.getElementById('from-date-input')?.showPicker?.() || document.getElementById('from-date-input')?.focus()
+                }}
+              >
+                <Calendar className="w-4 h-4 text-white drop-shadow-md" />
+              </label>
             </div>
             <span className="text-text-secondary text-sm">to</span>
             <div className="relative">
@@ -584,10 +598,24 @@ export default function AnnouncementsPage() {
                 type="date"
                 value={searchToDateInput}
                 onChange={(e) => setSearchToDateInput(e.target.value)}
-                className="px-3 py-2 pr-8 text-sm border border-border rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 [color-scheme:light]"
+                className="px-3 py-2 pr-8 text-sm border border-border rounded bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 [color-scheme:light] [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                style={{
+                  WebkitAppearance: 'none',
+                  MozAppearance: 'textfield'
+                } as React.CSSProperties}
                 title="To Date"
+                id="to-date-input"
               />
-              <Calendar className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              <label
+                htmlFor="to-date-input"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 cursor-pointer z-10 pointer-events-auto"
+                onClick={(e) => {
+                  e.preventDefault()
+                  document.getElementById('to-date-input')?.showPicker?.() || document.getElementById('to-date-input')?.focus()
+                }}
+              >
+                <Calendar className="w-4 h-4 text-white drop-shadow-md" />
+              </label>
             </div>
           </div>
 
