@@ -83,9 +83,14 @@ export function EditProfileModal({ isOpen, onClose, user, onUpdate }: EditProfil
         mobile: formData.mobile.trim(),
       }
       
-      const updatedUser = await userAPI.updateProfile(updateData)
-      // Update user in store
-      setUser(updatedUser)
+      await userAPI.updateProfile(updateData)
+      
+      // Refresh full user data from API to get all latest fields
+      const refreshedUser = await userAPI.getCurrentUser()
+      // Update user in store with complete refreshed data
+      setUser(refreshedUser)
+      
+      // Call onUpdate callback to refresh parent component
       onUpdate()
       onClose()
     } catch (err: any) {
