@@ -143,8 +143,46 @@ def init_announcements_database():
                 )
             """)
             
+            # Create indexes for performance optimization
+            # Index on trade_date (most common filter and ORDER BY column)
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_trade_date ON corporate_announcements(trade_date DESC)")
+                logger.info("Created index on trade_date")
+            except Exception as idx_error:
+                logger.debug(f"Index on trade_date may already exist: {idx_error}")
+            
+            # Index on symbol_nse for faster symbol filtering
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol_nse ON corporate_announcements(symbol_nse)")
+                logger.info("Created index on symbol_nse")
+            except Exception as idx_error:
+                logger.debug(f"Index on symbol_nse may already exist: {idx_error}")
+            
+            # Index on symbol_bse for faster symbol filtering
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol_bse ON corporate_announcements(symbol_bse)")
+                logger.info("Created index on symbol_bse")
+            except Exception as idx_error:
+                logger.debug(f"Index on symbol_bse may already exist: {idx_error}")
+            
+            # Index on company_name for faster filtering
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_company_name ON corporate_announcements(company_name)")
+                logger.info("Created index on company_name")
+            except Exception as idx_error:
+                logger.debug(f"Index on company_name may already exist: {idx_error}")
+            
+            # Index on descriptor_id for faster metadata joins
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_descriptor_id ON corporate_announcements(descriptor_id)")
+                logger.info("Created index on descriptor_id")
+            except Exception as idx_error:
+                logger.debug(f"Index on descriptor_id may already exist: {idx_error}")
+            
+            conn.commit()
+            
             _initialized = True
-            logger.info("Corporate announcements database initialized")
+            logger.info("Corporate announcements database initialized with indexes")
         except Exception as e:
             logger.error(f"Error initializing announcements database: {e}")
             # Don't raise - allow retry on next call
@@ -419,13 +457,23 @@ class AnnouncementsService:
         """
         conn = self._get_conn()
         try:
-            # Build base query for counting
+            # Build base query for counting - use approximate count for large tables when no filters
+            # For filtered queries, use exact count
+            use_approximate_count = not from_date and not to_date and not symbol and not search
+            
+            # Build query for data - exclude large TEXT fields (news_body) for list view
+            # This significantly improves performance as news_body can be very large
+            query = """SELECT 
+                id, trade_date, script_code, symbol_nse, symbol_bse,
+                company_name, file_status, news_headline, news_subhead,
+                descriptor_id, announcement_type, meeting_type,
+                date_of_meeting, created_at, updated_at
+                FROM corporate_announcements WHERE 1=1"""
+            params = []
+            
+            # Build count query
             count_query = "SELECT COUNT(*) FROM corporate_announcements WHERE 1=1"
             count_params = []
-            
-            # Build query for data
-            query = "SELECT * FROM corporate_announcements WHERE 1=1"
-            params = []
             
             if from_date:
                 query += " AND trade_date >= ?"
@@ -460,7 +508,9 @@ class AnnouncementsService:
                 params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
                 count_params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
             
-            # Get total count (before deduplication - will be adjusted after)
+            # Get total count
+            # For large tables without filters, COUNT(*) can be slow, but with indexes it should be acceptable
+            # DuckDB is optimized for analytical queries, so COUNT(*) with indexes should be reasonably fast
             total_result = conn.execute(count_query, count_params).fetchone()
             total_before_dedup = total_result[0] if total_result else 0
             
@@ -984,6 +1034,40 @@ class AnnouncementsService:
             
             columns = ["descriptor_id", "descriptor_name", "descriptor_category", "updated_at"]
             return dict(zip(columns, result))
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except:
+                    pass
+    
+    def get_descriptor_metadata_batch(self, descriptor_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+        """Get descriptor metadata for multiple IDs in a single query (batch lookup)"""
+        if not descriptor_ids:
+            return {}
+        
+        conn = self._get_conn()
+        try:
+            # Create placeholders for IN clause
+            placeholders = ','.join(['?' for _ in descriptor_ids])
+            cursor = conn.execute(
+                f"SELECT descriptor_id, descriptor_name, descriptor_category, updated_at "
+                f"FROM descriptor_metadata WHERE descriptor_id IN ({placeholders})",
+                descriptor_ids
+            )
+            results = cursor.fetchall()
+            
+            # Build dictionary mapping descriptor_id to metadata
+            metadata_dict = {}
+            for row in results:
+                metadata_dict[row[0]] = {
+                    "descriptor_id": row[0],
+                    "descriptor_name": row[1],
+                    "descriptor_category": row[2],
+                    "updated_at": row[3]
+                }
+            
+            return metadata_dict
         finally:
             if conn:
                 try:
