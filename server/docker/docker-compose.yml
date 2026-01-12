@@ -28,9 +28,11 @@ services:
       - TRUEDATA_DEFAULT_WEBSOCKET_PORT=${TRUEDATA_DEFAULT_WEBSOCKET_PORT:-8086}
       - TZ=${TZ:-Asia/Kolkata}
       # Admin user creation (optional - only used on first startup)
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # Telegram Integration
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL:-}
     volumes:
       # HOST_DATA_DIR is automatically set by docker-start scripts
       # Falls back to relative path if not set (for manual docker-compose usage)
