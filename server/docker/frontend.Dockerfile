@@ -1,58 +1,32 @@
-FROM node:20-alpine AS base
+FROM node:20-alpine
 
-# Install dependencies only when needed
-FROM base AS deps
-RUN apk add --no-cache libc6-compat wget
 WORKDIR /app
 
-# Copy package files first for better layer caching
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --prefer-offline --no-audit
+# Install system dependencies
+RUN apk add --no-cache libc6-compat wget tzdata
 
-# Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-
-# Copy node_modules from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-
-# Copy frontend source code
-COPY frontend/ ./
-
-# Set environment for build
-ENV NEXT_TELEMETRY_DISABLED=1
-
-# Build the application
-RUN npm run build
-
-# Production image - use standalone output
-FROM base AS runner
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
+# Set timezone
 ENV TZ=Asia/Kolkata
 
-# Install wget and tzdata for healthcheck and timezone support
-RUN apk add --no-cache wget tzdata
+# Copy package files
+COPY frontend/package.json frontend/package-lock.json* ./
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Install dependencies
+RUN npm ci
 
-# Copy standalone build output
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Copy source
+COPY frontend/ ./
 
-USER nextjs
-
-EXPOSE 3000
-
+# Development environment
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
-# Use standalone server
-CMD ["node", "server.js"]
+# Start in development mode
+CMD ["npm", "run", "dev"]
