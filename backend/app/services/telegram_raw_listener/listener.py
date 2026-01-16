@@ -70,20 +70,17 @@ class TelegramListener:
                         else:
                             telegram_channel_id = channel_id
                         
-                        # Only fetch messages from the last 10 minutes
+                        # Fetch recent messages (limit to 20)
+                        messages = await self.client.get_messages(telegram_channel_id, limit=20)
+                        
+                        # Filter messages: only from last 10 minutes AND newer than last_id
                         from datetime import datetime, timedelta, timezone
                         ten_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
                         
-                        # Fetch recent messages (limit to 20, within last 10 minutes)
-                        messages = await self.client.get_messages(
-                            telegram_channel_id, 
-                            limit=20,
-                            offset_date=ten_minutes_ago
-                        )
-                        
                         new_messages = []
                         for msg in messages:
-                            if msg.id > last_id:
+                            # Check if message is within time window and not yet processed
+                            if msg.date and msg.date >= ten_minutes_ago and msg.id > last_id:
                                 new_messages.append(msg)
                         
                         # Process new messages in chronological order (oldest first)
@@ -91,7 +88,13 @@ class TelegramListener:
                             await self._process_message(msg, channel_id)
                             
                     except Exception as e:
-                        logger.error(f"[Polling] Error checking channel {channel_id}: {e}")
+                        error_msg = str(e)
+                        # Skip channels that can't be polled (wrong type)
+                        if "Invalid object ID" in error_msg or "GetHistoryRequest" in error_msg:
+                            # This channel type doesn't support polling, skip silently
+                            pass
+                        else:
+                            logger.error(f"[Polling] Error checking channel {channel_id}: {e}")
                         
             except Exception as e:
                 logger.error(f"[Polling] Loop error: {e}")
@@ -236,10 +239,10 @@ class TelegramListener:
         logger.info("[Listener] Starting KeepAlive Task...")
         asyncio.create_task(self._keep_alive_loop())
         
-        # Polling disabled - event-based listener is working correctly
+        # Polling enabled as backup - events are unreliable
         # Start Polling Task
-        # logger.info("[Listener] Starting Polling Task (checking every 3 seconds)...")
-        # asyncio.create_task(self._polling_loop())
+        logger.info("[Listener] Starting Polling Task (checking every 3 seconds)...")
+        asyncio.create_task(self._polling_loop())
         
         logger.info("[Listener] Client started and listening (blocking).")
         

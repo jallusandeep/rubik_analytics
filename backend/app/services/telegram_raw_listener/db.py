@@ -124,6 +124,14 @@ def run_cleanup():
     """
     db = get_db()
     try:
+        # Check if table exists before cleanup
+        try:
+            db.run_listing_query(f"SELECT 1 FROM {TABLE_NAME} LIMIT 1", fetch='one')
+        except Exception:
+            # Table doesn't exist yet, skip cleanup
+            logger.info(f"Table {TABLE_NAME} doesn't exist yet, skipping cleanup")
+            return
+        
         cutoff_time = datetime.now(timezone.utc) - timedelta(hours=RETENTION_HOURS)
         # DuckDB timestamp comparison
         query = f"DELETE FROM {TABLE_NAME} WHERE received_at < ?"
