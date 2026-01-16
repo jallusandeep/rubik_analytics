@@ -1,8 +1,8 @@
-# Rubik Analytics - Documentation
+# Open Analytics - Documentation
 
 ## Overview
 
-**Rubik Analytics** is an enterprise analytics platform with comprehensive user management, role-based access control, and flexible multi-database architecture.
+**Open Analytics** is an enterprise analytics platform with comprehensive user management, role-based access control, and flexible multi-database architecture.
 
 ## Quick Start
 

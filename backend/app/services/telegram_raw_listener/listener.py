@@ -211,23 +211,34 @@ class TelegramListener:
                 # Sometimes we need to check if it matches our list.
                 # Let's try flexible matching
                 
-                # Standardize comparison
                 # Robust Channel ID matching
                 # Create a set of stringified normalized IDs for comparison
+                # Handle: positive/negative, with/without -100 prefix
                 valid_ids = set()
                 for c in self.channels:
                     c_str = str(c)
+                    c_abs = str(abs(c))
+                    
+                    # Add original
                     valid_ids.add(c_str)
+                    # Add absolute value
+                    valid_ids.add(c_abs)
+                    # Add with -100 prefix removed
                     valid_ids.add(c_str.replace("-100", ""))
-                    if not c_str.startswith("-100"):
-                         valid_ids.add(f"-100{c_str}")
+                    # Add absolute with -100 prefix
+                    if not c_abs.startswith("100"):
+                        valid_ids.add(f"100{c_abs}")
 
                 current_id_str = str(chat_id)
+                current_id_abs = str(abs(chat_id))
                 
-                if current_id_str in valid_ids or current_id_str.replace("-100", "") in valid_ids:
+                # Check if current ID matches any variation
+                if (current_id_str in valid_ids or 
+                    current_id_abs in valid_ids or
+                    current_id_str.replace("-100", "") in valid_ids):
                     await self._process_message_direct(event.message, chat)
                 else:
-                    logger.warning(f"Ignored msg from {chat_id} ({getattr(chat, 'title', 'NoTitle')}) - Not in enabled list.")
+                    logger.warning(f"Ignored msg from {chat_id} ({getattr(chat, 'title', 'Self')}) - Not in enabled list.")
                     pass
                     
             except Exception as e:

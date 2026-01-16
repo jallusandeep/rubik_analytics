@@ -18,7 +18,7 @@ ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
 echo "[INFO] Starting backend (skipping explicit init script)..."
 
 echo "==========================================="
-echo "  STARTING RUBIK ANALYTICS BACKEND"
+echo "  STARTING OPEN ANALYTICS BACKEND"
 echo "==========================================="
 # Match Windows server behavior: use --reload for development parity
 # Note: We don't force --env-file here because Docker Compose injects environment variables directly,

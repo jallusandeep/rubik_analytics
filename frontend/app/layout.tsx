@@ -4,7 +4,7 @@ import { AuthProvider } from '@/components/providers/AuthProvider'
 import Script from 'next/script'
 
 export const metadata: Metadata = {
-  title: 'Rubik Analytics',
+  title: 'Open Analytics',
   description: 'Analytics Platform',
 }
 

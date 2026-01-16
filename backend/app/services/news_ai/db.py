@@ -598,16 +598,16 @@ def get_final_news(limit=20, offset=0, search: Optional[str] = None):
     """Fetch AI-enriched news from final database with pagination and fuzzy search."""
     db = get_shared_db()
     try:
-        where_clause = ""
+        where_parts = ["(is_duplicate IS NULL OR is_duplicate = FALSE)"]  # Exclude duplicates
         params = []
         
         if search and search.strip():
             tokens = search.strip().split()
-            where_parts = []
+            search_parts = []
             for token in tokens:
                 pattern = f"%{token}%"
                 # Substring match (ILIKE) + Fuzzy match (jaro_winkler) for better relevance
-                where_parts.append("""
+                search_parts.append("""
                     (headline ILIKE ? 
                     OR summary ILIKE ? 
                     OR ticker ILIKE ? 
@@ -616,7 +616,9 @@ def get_final_news(limit=20, offset=0, search: Optional[str] = None):
                     OR jaro_winkler_similarity(lower(company_name), lower(?)) > 0.8)
                 """)
                 params.extend([pattern, pattern, pattern, pattern, token.lower(), token.lower()])
-            where_clause = "WHERE " + " AND ".join(where_parts)
+            where_parts.append("(" + " AND ".join(search_parts) + ")")
+        
+        where_clause = "WHERE " + " AND ".join(where_parts)
 
         # Get total count
         count_query = f"SELECT COUNT(*) FROM {FINAL_TABLE} {where_clause}"

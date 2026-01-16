@@ -96,7 +96,7 @@ export default function LoginPage() {
         <div className="bg-card rounded border border-border shadow-sm p-6">
           <div className="text-center mb-6">
             <h1 className="text-3xl font-sans font-semibold text-text-primary mb-2 tracking-tight">
-              RUBIK ANALYTICS
+              OPEN ANALYTICS
             </h1>
           </div>
 

@@ -7,7 +7,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0\..\.."
 
 echo ========================================
-echo Rubik Analytics - Starting All Servers
+echo Open Analytics - Starting All Servers
 echo ========================================
 echo.
 
@@ -172,7 +172,7 @@ set "TRUEDATA_DEFAULT_WEBSOCKET_PORT=8086"
 REM -----------------------------------------------------------------------------
 
 REM Start backend server ( Integrated with Workers )
-start "Rubik Backend" cmd /k "%~dp0run-integrated-backend.bat"
+start "Open Analytics Backend" cmd /k "%~dp0run-integrated-backend.bat"
 
 timeout /t 5 /nobreak >nul
 
@@ -189,7 +189,7 @@ if not exist "%FRONTEND_DIR%\node_modules" (
 )
 
 REM Start frontend server directly
-start "Rubik Frontend" cmd /k "cd /d "%FRONTEND_DIR%" && npm run dev"
+start "Open Analytics Frontend" cmd /k "cd /d "%FRONTEND_DIR%" && npm run dev"
 
 ping 127.0.0.1 -n 3 >nul
 

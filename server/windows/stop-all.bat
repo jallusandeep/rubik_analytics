@@ -1,5 +1,5 @@
 @echo off
-REM Rubik Analytics - Stop All Servers
+REM Open Analytics - Stop All Servers
 REM Stops both backend and frontend servers cleanly
 
 setlocal enabledelayedexpansion
@@ -7,7 +7,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0\..\.."
 
 echo ========================================
-echo Rubik Analytics - Stopping All Servers
+echo Open Analytics - Stopping All Servers
 echo ========================================
 echo.
 

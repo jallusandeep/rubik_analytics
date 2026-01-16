@@ -208,16 +208,16 @@ export function Sidebar() {
           {/* RUBIK - Full text, fades out smoothly when collapsing */}
           <h1 className={`text-base font-sans font-semibold text-text-primary tracking-tight transition-all duration-300 ease-in-out text-center absolute ${collapsed ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
             }`}>
-            RUBIK
+            OPEN ANALYTICS
           </h1>
-          {/* R - Single letter, stays still with cool animation when collapsed */}
+          {/* O - Single letter, stays still with cool animation when collapsed */}
           <div className={`text-xl font-sans font-bold text-primary flex items-center justify-center absolute transition-all duration-300 ease-in-out ${collapsed ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'
             }`}
             style={{
               animation: collapsed ? 'pulse-glow 2s ease-in-out infinite' : 'none',
               textShadow: collapsed ? '0 0 8px rgba(59, 130, 246, 0.5), 0 0 12px rgba(59, 130, 246, 0.3)' : 'none',
             }}>
-            R
+            O
           </div>
         </div>
 

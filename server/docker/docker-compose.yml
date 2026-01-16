@@ -10,7 +10,7 @@ services:
     build:
       context: ../..
       dockerfile: server/docker/backend.Dockerfile
-    container_name: rubik-backend
+    container_name: open-analytics-backend
     ports:
       - "8000:8000"
     environment:
@@ -28,7 +28,7 @@ services:
       - ACCESS_TOKEN_EXPIRE_MINUTES=480
       - IDLE_TIMEOUT_MINUTES=30
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://frontend:3000,http://127.0.0.1:3000,http://rubik-frontend:3000}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://frontend:3000,http://127.0.0.1:3000,http://open-analytics-frontend:3000}
       - TRUEDATA_DEFAULT_AUTH_URL=${TRUEDATA_DEFAULT_AUTH_URL:-https://auth.truedata.in/token}
       - TRUEDATA_DEFAULT_WEBSOCKET_PORT=${TRUEDATA_DEFAULT_WEBSOCKET_PORT:-8086}
       - TZ=${TZ:-Asia/Kolkata}
@@ -46,7 +46,7 @@ services:
       - ../../backend:/app/backend
     restart: unless-stopped
     networks:
-      - rubik-network
+      - open-analytics-network
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 30s
@@ -71,7 +71,7 @@ services:
     build:
       context: ../..
       dockerfile: server/docker/frontend.Dockerfile
-    container_name: rubik-frontend
+    container_name: open-analytics-frontend
     ports:
       - "3000:3000"
     environment:
@@ -84,7 +84,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - rubik-network
+      - open-analytics-network
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/" ]
       interval: 30s
@@ -106,5 +106,5 @@ services:
           memory: 256M
 
 networks:
-  rubik-network:
+  open-analytics-network:
     driver: bridge
