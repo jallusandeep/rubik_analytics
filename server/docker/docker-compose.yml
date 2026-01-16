@@ -17,6 +17,11 @@ services:
       - DATA_DIR=/app/data
       - DATABASE_URL=sqlite:////app/data/auth/sqlite/auth.db
       - DUCKDB_PATH=/app/data/analytics/duckdb
+      - LISTING_DB_PATH=/app/data/News/Raw/telegram_listing.duckdb
+      - RAW_DB_PATH=/app/data/News/Raw/telegram_raw.duckdb
+      - SCORING_DB_PATH=/app/data/News/Scoring/news_scoring.duckdb
+      - AI_DB_PATH=/app/data/News/Final/news_ai.duckdb
+      - FINAL_DB_PATH=/app/data/News/Final/final_news.duckdb
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_SYSTEM_SECRET_KEY=${JWT_SYSTEM_SECRET_KEY}
       - JWT_ALGORITHM=HS256

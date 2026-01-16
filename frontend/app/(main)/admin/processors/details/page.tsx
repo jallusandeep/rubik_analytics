@@ -158,6 +158,7 @@ export default function ProcessorDetailsPage() {
                                         <TableHeaderCell>Sentiment</TableHeaderCell>
                                         <TableHeaderCell numeric>Impact</TableHeaderCell>
                                         <TableHeaderCell>Model</TableHeaderCell>
+                                        <TableHeaderCell>Match</TableHeaderCell>
                                         <TableHeaderCell numeric>Latency (ms)</TableHeaderCell>
                                     </>
                                 )}
@@ -165,7 +166,7 @@ export default function ProcessorDetailsPage() {
                             <TableBody>
                                 {tableData.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={activeTab === 'extraction' ? 8 : activeTab === 'scoring' ? 11 : 8} className="text-center text-text-secondary">No recent data found.</TableCell>
+                                        <TableCell colSpan={activeTab === 'extraction' ? 8 : activeTab === 'scoring' ? 11 : 10} className="text-center text-text-secondary">No recent data found.</TableCell>
                                     </TableRow>
                                 ) : tableData.map((row: any, idx) => (
                                     <TableRow key={idx} index={idx}>
@@ -304,6 +305,25 @@ export default function ProcessorDetailsPage() {
                                                 </TableCell>
                                                 <TableCell numeric className="font-bold text-text-primary">{row.impact_score}</TableCell>
                                                 <TableCell className="text-xs text-text-secondary">{row.ai_model}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col gap-0.5">
+                                                        {row.is_duplicate ? (
+                                                            <>
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-[10px] bg-warning/10 text-warning px-1.5 py-0.5 rounded font-bold">DUP</span>
+                                                                    <span className="text-[10px] text-warning font-mono">
+                                                                        {Math.round((row.similarity_score || 0) * 100)}%
+                                                                    </span>
+                                                                </div>
+                                                                <span className="text-[9px] text-text-secondary truncate max-w-[80px]" title={`Duplicate of #${row.duplicate_of}`}>
+                                                                    of #{row.duplicate_of}
+                                                                </span>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-[10px] bg-success/10 text-success px-1.5 py-0.5 rounded font-bold w-fit">UNIQUE</span>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell numeric className="text-xs text-text-secondary font-mono">{row.latency}</TableCell>
                                             </>
                                         )}

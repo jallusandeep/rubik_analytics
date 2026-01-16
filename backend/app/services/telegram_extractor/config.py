@@ -12,8 +12,8 @@ RAW_DIR = os.path.join(DATA_DIR, "Raw")
 CACHE_DIR = os.path.join(DATA_DIR, "Cache")
 
 # Database Paths
-INPUT_DB_PATH = os.path.join(RAW_DIR, "telegram_listing.duckdb")
-OUTPUT_DB_PATH = os.path.join(RAW_DIR, "telegram_raw.duckdb")
+INPUT_DB_PATH = os.getenv("LISTING_DB_PATH", os.path.join(RAW_DIR, "telegram_listing.duckdb"))
+OUTPUT_DB_PATH = os.getenv("RAW_DB_PATH", os.path.join(RAW_DIR, "telegram_raw.duckdb"))
 
 # Cache Paths
 LINK_CACHE_DIR = os.path.join(CACHE_DIR, "link_text_cache")

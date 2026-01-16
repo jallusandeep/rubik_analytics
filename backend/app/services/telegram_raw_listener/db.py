@@ -44,7 +44,8 @@ def init_db():
         
         # Migration: Ensure columns exist
         try:
-            cols = db.run_listing_query(f"DESCRIBE {TABLE_NAME}", fetch='all')
+            # Check columns using information_schema to avoid DESCRIBE parsing issues
+            cols = db.run_listing_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{TABLE_NAME}'", fetch='all')
             col_names = [c[0] for c in cols]
             
             if 'file_path' not in col_names:
@@ -125,9 +126,8 @@ def run_cleanup():
     db = get_db()
     try:
         # Check if table exists before cleanup
-        try:
-            db.run_listing_query(f"SELECT 1 FROM {TABLE_NAME} LIMIT 1", fetch='one')
-        except Exception:
+        exists = db.run_listing_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{TABLE_NAME}'", fetch='one')
+        if not exists or exists[0] == 0:
             # Table doesn't exist yet, skip cleanup
             logger.info(f"Table {TABLE_NAME} doesn't exist yet, skipping cleanup")
             return

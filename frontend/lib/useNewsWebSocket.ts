@@ -25,6 +25,12 @@ export interface NewsItem {
     url?: string
     impact_score?: number
     created_at?: string
+    // Deduplication fields
+    source_count?: number
+    source_handle?: string
+    additional_sources?: string[]
+    // Internal fields
+    event_type?: string
 }
 
 interface UseNewsWebSocketReturn {
@@ -98,9 +104,15 @@ export function useNewsWebSocket(
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data)
-                    if (data.type === 'news_update' || data.event === 'new_news') {
+                    // Handle both new news and updates
+                    if (data.type === 'news_update' || data.event === 'new_news' || data.event === 'update_news') {
                         const news = data.data || data
                         if (news && news.news_id) {
+                            // Helper to attach event type if missing (for UI to know if it's update)
+                            if (!news.event_type && data.event) {
+                                news.event_type = data.event;
+                            }
+
                             // Add to buffer instead of immediate call
                             newsBufferRef.current.push(news)
                         }

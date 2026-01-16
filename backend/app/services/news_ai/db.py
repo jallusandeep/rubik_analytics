@@ -1,11 +1,18 @@
 import logging
+import sqlite3
 import os
-from typing import Optional
+import json
+from typing import Optional, Tuple, Dict, List, Any
+from datetime import datetime, timedelta, timezone
 from .config import SCORING_DB_PATH, SCORING_TABLE, AI_DB_PATH, AI_TABLE, FINAL_TABLE
 from app.services.shared_db import get_shared_db
 from app.core.websocket_manager import manager
+from .similarity import is_duplicate, calculate_combined_similarity
 
 logger = logging.getLogger(__name__)
+
+# Global in-memory cache for deduplication (fingerprint -> (news_id, timestamp))
+_recent_processed_cache = {}
 
 def get_db():
     return get_shared_db()
@@ -85,8 +92,8 @@ def ensure_schema():
         db.run_final_query("INSERT OR IGNORE INTO system_settings (key, value) VALUES ('news_sync_enabled', 'true')")
 
         # Migration: Check for missing columns in news_ai
-        cols = db.run_ai_query(f"PRAGMA table_info({AI_TABLE})", fetch='all')
-        existing_cols = [c[1] for c in cols]
+        cols = db.run_ai_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{AI_TABLE}'", fetch='all')
+        existing_cols = [c[0] for c in cols]
         
         if 'impact_score' not in existing_cols:
             logger.info("Adding impact_score column to news_ai")
@@ -95,6 +102,42 @@ def ensure_schema():
         if 'latency_ms' not in existing_cols:
             logger.info("Adding latency_ms column to news_ai")
             db.run_ai_query(f"ALTER TABLE {AI_TABLE} ADD COLUMN latency_ms INTEGER DEFAULT 0")
+
+        if 'is_duplicate' not in existing_cols:
+            logger.info("Adding is_duplicate column to news_ai")
+            db.run_ai_query(f"ALTER TABLE {AI_TABLE} ADD COLUMN is_duplicate BOOLEAN DEFAULT FALSE")
+
+        if 'duplicate_of_id' not in existing_cols:
+            logger.info("Adding duplicate_of_id column to news_ai")
+            db.run_ai_query(f"ALTER TABLE {AI_TABLE} ADD COLUMN duplicate_of_id BIGINT")
+
+        if 'similarity_score' not in existing_cols:
+            logger.info("Adding similarity_score column to news_ai")
+            db.run_ai_query(f"ALTER TABLE {AI_TABLE} ADD COLUMN similarity_score DOUBLE DEFAULT 0.0")
+
+        # Migration: Check for missing columns in final_news
+        final_cols = db.run_final_query(f"PRAGMA table_info({FINAL_TABLE})", fetch='all')
+        existing_final_cols = [c[1] for c in final_cols]
+        
+        if 'is_duplicate' not in existing_final_cols:
+            logger.info("Adding is_duplicate column to final_news")
+            db.run_final_query(f"ALTER TABLE {FINAL_TABLE} ADD COLUMN is_duplicate BOOLEAN DEFAULT FALSE")
+            
+        if 'duplicate_of_id' not in existing_final_cols:
+            logger.info("Adding duplicate_of_id column to final_news")
+            db.run_final_query(f"ALTER TABLE {FINAL_TABLE} ADD COLUMN duplicate_of_id BIGINT")
+            
+        if 'source_count' not in existing_final_cols:
+            logger.info("Adding source_count column to final_news")
+            db.run_final_query(f"ALTER TABLE {FINAL_TABLE} ADD COLUMN source_count INTEGER DEFAULT 1")
+            
+        if 'additional_sources' not in existing_final_cols:
+            logger.info("Adding additional_sources column to final_news")
+            db.run_final_query(f"ALTER TABLE {FINAL_TABLE} ADD COLUMN additional_sources TEXT") # JSON array
+            
+        if 'source_handle' not in existing_final_cols:
+            logger.info("Adding source_handle column to final_news")
+            db.run_final_query(f"ALTER TABLE {FINAL_TABLE} ADD COLUMN source_handle TEXT")
 
     except Exception as e:
         logger.error(f"AI Schema Error during migration: {e}")
@@ -141,6 +184,16 @@ def get_eligible_news(limit=1):
         if not pending_items:
             return []
 
+        # Check if telegram_raw exists first to avoid Catalog Error during startup
+        # (This avoids hitting shared_db.py error logger)
+        try:
+            raw_exists = db.run_raw_query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'telegram_raw'", fetch='one')
+            if not raw_exists or raw_exists[0] == 0:
+                logger.info("Table 'telegram_raw' not found yet. Skipping eligible news fetch.")
+                return []
+        except Exception:
+            return []
+
         results = []
         for (news_id,) in pending_items:
             # Mark as PROCESSING
@@ -181,6 +234,132 @@ def mark_failed(news_id, error_msg):
     except Exception as e:
         logger.error(f"Failed to mark news {news_id} as failed: {e}")
 
+def has_valid_content(ai_data: Dict) -> bool:
+    """Check if news has meaningful content (not just headline)."""
+    summary = ai_data.get('summary', '').strip()
+    return len(summary) > 50  # Minimum content length
+
+def find_duplicate_in_window(ai_data: Dict, window_minutes: int = 60) -> Optional[Tuple[int, float]]:
+    """
+    Check for duplicate news within time window.
+    check both in-memory cache (for race conditions) and database (for persistence).
+    
+    Returns:
+        Tuple of (duplicate_news_id, similarity_score) if duplicate found, None otherwise
+    """
+    # 1. Generate fingerprint for fast in-memory check
+    headline = ai_data.get('headline', '').strip().lower()
+    if not headline:
+        return None
+        
+    import hashlib
+    fingerprint = hashlib.md5(headline.encode('utf-8')).hexdigest()
+    
+    # 2. Check in-memory cache first
+    now = datetime.now(timezone.utc)
+    if fingerprint in _recent_processed_cache:
+        cached_id, cached_time = _recent_processed_cache[fingerprint]
+        # Check if within window
+        if (now - cached_time).total_seconds() < (window_minutes * 60):
+            logger.info(f"Duplicate found in memory cache: {cached_id}")
+            return (cached_id, 1.0) # 1.0 similarity for exact fingerprint match
+
+    db = get_db()
+    try:
+        # Get recent news from last N minutes
+        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        
+        query = f"""
+        SELECT news_id, headline, summary, company_name, ticker, exchange
+        FROM {FINAL_TABLE}
+        WHERE created_at >= ?
+        AND is_duplicate = FALSE
+        ORDER BY created_at DESC
+        LIMIT 50
+        """
+        
+        recent_news = db.run_final_query(query, [cutoff_time], fetch='all')
+        
+        if not recent_news:
+            return None
+        
+        # Check similarity against each recent news item
+        for row in recent_news:
+            existing_news = {
+                'news_id': row[0],
+                'headline': row[1] or '',
+                'summary': row[2] or '',
+                'company_name': row[3] or '',
+                'ticker': row[4] or '',
+                'exchange': row[5] or ''
+            }
+            
+            is_dup, similarity_score = is_duplicate(ai_data, existing_news, threshold=0.60)
+            
+            if is_dup:
+                logger.info(f"Found duplicate: news_id {existing_news['news_id']} (similarity: {similarity_score:.2f})")
+                return (existing_news['news_id'], similarity_score)
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error checking for duplicates: {e}")
+        return None
+
+def update_source_count(original_news_id: int, new_source_handle: str):
+    """Update original news with additional source."""
+    db = get_db()
+    try:
+        # Get current additional_sources
+        result = db.run_final_query(
+            f"SELECT additional_sources, source_count, source_handle FROM {FINAL_TABLE} WHERE news_id = ?",
+            [original_news_id],
+            fetch='one'
+        )
+        
+        if not result:
+            return
+        
+        additional_sources_json, source_count, original_source = result
+        
+        # Parse existing sources
+        if additional_sources_json:
+            try:
+                additional_sources = json.loads(additional_sources_json)
+            except:
+                additional_sources = []
+        else:
+            additional_sources = []
+        
+        # Add new source if not already present
+        if new_source_handle and new_source_handle not in additional_sources:
+            if original_source and new_source_handle != original_source:
+                additional_sources.append(new_source_handle)
+        
+        # Update database
+        new_count = 1 + len(additional_sources)
+        db.run_final_query(
+            f"UPDATE {FINAL_TABLE} SET source_count = ?, additional_sources = ? WHERE news_id = ?",
+            [new_count, json.dumps(additional_sources), original_news_id]
+        )
+        
+        logger.info(f"Updated source count for news {original_news_id}: {new_count} sources")
+        
+        # Broadcast update to frontend
+        try:
+            update_data = {
+                "type": "update_news",
+                "news_id": original_news_id,
+                "source_count": new_count,
+                "additional_sources": additional_sources
+            }
+            manager.broadcast_news_sync(update_data)
+        except Exception as e:
+            logger.warning(f"Failed to broadcast source update: {e}")
+            
+    except Exception as e:
+        logger.error(f"Failed to update source count: {e}")
+
 def insert_enriched_news(news_id, received_date, ai_data, ai_model, ai_config_id, latency_ms=0, original_url=None):
     """Save AI enriched news to DB and mark queue as COMPLETED."""
     db = get_db()
@@ -189,8 +368,9 @@ def insert_enriched_news(news_id, received_date, ai_data, ai_model, ai_config_id
         INSERT INTO {AI_TABLE} (
             news_id, received_date, category_code, sub_type_code, company_name,
             ticker, exchange, country_code, headline, summary, sentiment,
-            language_code, url, ai_model, ai_config_id, impact_score, latency_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            language_code, url, ai_model, ai_config_id, impact_score, latency_ms,
+            is_duplicate, duplicate_of_id, similarity_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         impact_score = ai_data.get('impact_score', 0)
         # Handle cases where impact_score might be a string
@@ -198,6 +378,15 @@ def insert_enriched_news(news_id, received_date, ai_data, ai_model, ai_config_id
             impact_score = int(impact_score)
         except:
             impact_score = 0
+
+        # Duplicate check before insert
+        duplicate_result = find_duplicate_in_window(ai_data, window_minutes=60)
+        is_duplicate_flag = False
+        duplicate_of_id_val = None
+        similarity_score_val = 0.0
+        if duplicate_result:
+            duplicate_of_id_val, similarity_score_val = duplicate_result
+            is_duplicate_flag = True
 
         # Use original URL if available, otherwise get from AI data
         url = original_url if original_url else ai_data.get('url', '')
@@ -219,19 +408,83 @@ def insert_enriched_news(news_id, received_date, ai_data, ai_model, ai_config_id
             ai_model,
             ai_config_id,
             impact_score,
-            latency_ms
+            latency_ms,
+            is_duplicate_flag,
+            duplicate_of_id_val,
+            similarity_score_val
         ])
         
         # Mark as COMPLETED
         db.run_ai_query("UPDATE ai_queue SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP WHERE news_id = ?", [news_id])
         
-        # 3. Sync to Final Database
+        # 3. Handle duplicates for final table sync
+        # We already checked for duplicate_result above during AI_TABLE insert
+        # No need to re-fetch if we have it
+        # Actually duplicate_result is already computed above
+        
+        # Get source handle from original URL or news data
+        source_handle = None
+        if original_url:
+            # Extract source from URL (e.g., moneycontrol.com, livemint.com)
+            import re
+            match = re.search(r'//(?:www\.)?([^/]+)', original_url)
+            if match:
+                source_handle = match.group(1).replace('www.', '')
+        
+        if duplicate_result:
+            # Duplicate found - update original and mark this as duplicate
+            original_news_id, similarity_score = duplicate_result
+            
+            try:
+                # Insert as duplicate
+                final_query = f"""
+                INSERT INTO {FINAL_TABLE} (
+                    news_id, received_date, headline, summary, company_name,
+                    ticker, exchange, country_code, sentiment, url, impact_score,
+                    is_duplicate, duplicate_of_id, source_handle
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?)
+                """
+                db.run_final_query(final_query, [
+                    news_id,
+                    received_date,
+                    ai_data.get('headline', ''),
+                    ai_data.get('summary', ''),
+                    ai_data.get('company_name', ''),
+                    ai_data.get('ticker', ''),
+                    ai_data.get('exchange', ''),
+                    ai_data.get('country_code', ''),
+                    ai_data.get('sentiment', ''),
+                    url,
+                    impact_score,
+                    original_news_id,
+                    source_handle
+                ])
+                
+                # Update original with source count
+                update_source_count(original_news_id, source_handle)
+                
+                logger.info(f"Marked news {news_id} as duplicate of {original_news_id} (similarity: {similarity_score:.2f})")
+                # Don't broadcast duplicates
+                return
+                
+            except Exception as dup_err:
+                logger.error(f"Failed to handle duplicate: {dup_err}")
+                # Continue with normal insert if duplicate handling fails
+        
+        # 4. Sync to Final Database (unique news)
         try:
+            # Validate content before inserting
+            if not has_valid_content(ai_data):
+                logger.info(f"Skipping news {news_id} - no meaningful content (summary too short)")
+                # Still mark as completed but don't insert to final or broadcast
+                return
+            
             final_query = f"""
             INSERT INTO {FINAL_TABLE} (
                 news_id, received_date, headline, summary, company_name,
-                ticker, exchange, country_code, sentiment, url, impact_score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ticker, exchange, country_code, sentiment, url, impact_score,
+                source_handle, source_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
             """
             db.run_final_query(final_query, [
                 news_id,
@@ -244,13 +497,33 @@ def insert_enriched_news(news_id, received_date, ai_data, ai_model, ai_config_id
                 ai_data.get('country_code', ''),
                 ai_data.get('sentiment', ''),
                 url,
-                impact_score
+                impact_score,
+                source_handle
             ])
             logger.info(f"Successfully synced news {news_id} to final database.")
             
-            # 4. Broadcast to frontend
+            # Update in-memory cache
+            try:
+                headline = ai_data.get('headline', '').strip().lower()
+                if headline:
+                    import hashlib
+                    fingerprint = hashlib.md5(headline.encode('utf-8')).hexdigest()
+                    now = datetime.now(timezone.utc)
+                    _recent_processed_cache[fingerprint] = (news_id, now)
+                    
+                    # Cleanup old entries (simple)
+                    if len(_recent_processed_cache) > 1000:
+                        cutoff = now - timedelta(hours=2)
+                        to_remove = [k for k, v in _recent_processed_cache.items() if v[1] < cutoff]
+                        for k in to_remove:
+                            del _recent_processed_cache[k]
+            except Exception as cache_err:
+                logger.warning(f"Failed to update memory cache: {cache_err}")
+            
+            # 5. Broadcast to frontend (only for unique news with content)
             try:
                 broadcast_data = {
+                    "type": "new_news",
                     "news_id": news_id,
                     "received_date": received_date.isoformat() if hasattr(received_date, 'isoformat') else str(received_date),
                     "headline": ai_data.get('headline', ''),
@@ -261,7 +534,9 @@ def insert_enriched_news(news_id, received_date, ai_data, ai_model, ai_config_id
                     "country_code": ai_data.get('country_code', ''),
                     "sentiment": ai_data.get('sentiment', ''),
                     "url": url,
-                    "impact_score": impact_score
+                    "impact_score": impact_score,
+                    "source_handle": source_handle,
+                    "source_count": 1
                 }
                 manager.broadcast_news_sync(broadcast_data)
             except Exception as broadcast_err:
@@ -289,7 +564,8 @@ def get_recent_enrichments(limit=50):
         query = f"""
             SELECT 
                 news_id, created_at, headline, category_code, sentiment, 
-                impact_score, ai_model, latency_ms, summary, url
+                impact_score, ai_model, latency_ms, summary, url,
+                is_duplicate, duplicate_of_id, similarity_score
             FROM {AI_TABLE}
             ORDER BY created_at DESC
             LIMIT ?
@@ -308,7 +584,10 @@ def get_recent_enrichments(limit=50):
                 "ai_model": row[6],
                 "latency": row[7],
                 "summary": row[8],
-                "url": row[9]
+                "url": row[9],
+                "is_duplicate": row[10],
+                "duplicate_of": row[11],
+                "similarity_score": row[12]
             })
         return result
     except Exception as e:
@@ -344,11 +623,13 @@ def get_final_news(limit=20, offset=0, search: Optional[str] = None):
         total_count = db.run_final_query(count_query, params, fetch='one')[0]
         
         # Get paginated data
+        # Get paginated data
         data_params = params + [limit, offset]
         query = f"""
             SELECT 
                 news_id, received_date, headline, summary, company_name,
-                ticker, exchange, country_code, sentiment, url, impact_score, created_at
+                ticker, exchange, country_code, sentiment, url, impact_score, created_at,
+                source_count, additional_sources, source_handle
             FROM {FINAL_TABLE}
             {where_clause}
             ORDER BY created_at DESC
@@ -358,6 +639,15 @@ def get_final_news(limit=20, offset=0, search: Optional[str] = None):
         
         result = []
         for row in rows:
+            # Parse additional_sources JSON if present
+            additional_sources = []
+            if row[13]:
+                try:
+                    import json
+                    additional_sources = json.loads(row[13])
+                except:
+                    additional_sources = []
+
             result.append({
                 "news_id": row[0],
                 "received_date": row[1].strftime("%Y-%m-%d %H:%M:%S") if row[1] else None,
@@ -370,7 +660,10 @@ def get_final_news(limit=20, offset=0, search: Optional[str] = None):
                 "sentiment": row[8],
                 "url": row[9],
                 "impact_score": row[10],
-                "created_at": row[11].strftime("%Y-%m-%d %H:%M:%S") if row[11] else None
+                "created_at": row[11].strftime("%Y-%m-%d %H:%M:%S") if row[11] else None,
+                "source_count": row[12] if row[12] else 1,
+                "additional_sources": additional_sources,
+                "source_handle": row[14]
             })
         return result, total_count
     except Exception as e:
@@ -402,37 +695,53 @@ def set_system_setting(key, value):
 def get_pipeline_backlog():
     """Get counts of unprocessed items across all stages."""
     db = get_db()
-    stats = {}
+    stats = {
+        "listing_unextracted": 0,
+        "raw_undeduplicated": 0,
+        "raw_unscored": 0,
+        "ai_pending": 0,
+        "final_total": 0
+    }
     
     try:
         # 1. Listing (Unextracted)
-        res = db.run_listing_query("SELECT COUNT(*) FROM telegram_listing WHERE is_extracted = FALSE", fetch='one')
-        stats["listing_unextracted"] = res[0] if res else 0
+        exists = db.run_listing_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'telegram_listing'", fetch='one')
+        if exists and exists[0] > 0:
+            res = db.run_listing_query("SELECT COUNT(*) FROM telegram_listing WHERE is_extracted = FALSE", fetch='one')
+            stats["listing_unextracted"] = res[0] if res else 0
     except Exception as e:
-        stats["listing_unextracted_error"] = str(e)
+        logger.warning(f"Backlog error (listing): {e}")
 
     try:
         # 2. Raw (Undeduplicated & Unscored)
-        res_dedup = db.run_raw_query("SELECT COUNT(*) FROM telegram_raw WHERE is_deduplicated = FALSE", fetch='one')
-        stats["raw_undeduplicated"] = res_dedup[0] if res_dedup else 0
-        
-        res_score = db.run_raw_query("SELECT COUNT(*) FROM telegram_raw WHERE is_scored = FALSE AND is_duplicate = FALSE", fetch='one')
-        stats["raw_unscored"] = res_score[0] if res_score else 0
+        exists = db.run_raw_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{SCORING_TABLE.replace('news_scoring', 'telegram_raw')}'", fetch='one')
+        # Wait, SCORING_TABLE is news_scoring, but we want telegram_raw from raw connection
+        exists = db.run_raw_query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'telegram_raw'", fetch='one')
+        if exists and exists[0] > 0:
+            res_dedup = db.run_raw_query("SELECT COUNT(*) FROM telegram_raw WHERE is_deduplicated = FALSE", fetch='one')
+            stats["raw_undeduplicated"] = res_dedup[0] if res_dedup else 0
+            
+            res_score = db.run_raw_query("SELECT COUNT(*) FROM telegram_raw WHERE is_scored = FALSE AND is_duplicate = FALSE", fetch='one')
+            stats["raw_unscored"] = res_score[0] if res_score else 0
     except Exception as e:
-        stats["raw_error"] = str(e)
+         logger.warning(f"Backlog error (raw): {e}")
 
     try:
         # 3. AI Queue (Pending)
-        res = db.run_ai_query("SELECT COUNT(*) FROM ai_queue WHERE status = 'PENDING'", fetch='one')
-        stats["ai_pending"] = res[0] if res else 0
+        exists = db.run_ai_query("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'ai_queue'", fetch='one')
+        if exists and exists[0] > 0:
+            res = db.run_ai_query("SELECT COUNT(*) FROM ai_queue WHERE status = 'PENDING'", fetch='one')
+            stats["ai_pending"] = res[0] if res else 0
     except Exception as e:
-        stats["ai_error"] = str(e)
+         logger.warning(f"Backlog error (ai): {e}")
 
     try:
         # 4. Final Total
-        res = db.run_final_query("SELECT COUNT(*) FROM final_news", fetch='one')
-        stats["final_total"] = res[0] if res else 0
+        exists = db.run_final_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{FINAL_TABLE}'", fetch='one')
+        if exists and exists[0] > 0:
+            res = db.run_final_query(f"SELECT COUNT(*) FROM {FINAL_TABLE}", fetch='one')
+            stats["final_total"] = res[0] if res else 0
     except Exception as e:
-        stats["final_error"] = str(e)
+         logger.warning(f"Backlog error (final): {e}")
 
     return stats

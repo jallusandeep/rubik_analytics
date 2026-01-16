@@ -57,15 +57,23 @@ def get_recent_scores(limit=50):
             return []
 
         raw_ids = [row[1] for row in score_rows]
-        raw_ids_str = ','.join(str(id) for id in raw_ids)
-        
-        raw_query = f"""
-            SELECT raw_id, combined_text, link_text, source_handle, received_at
-            FROM {RAW_TABLE}
-            WHERE raw_id IN ({raw_ids_str})
-        """
-        raw_rows = db.run_raw_query(raw_query, fetch='all')
-        raw_data = {row[0]: row for row in raw_rows} if raw_rows else {}
+        if not raw_ids:
+            return []
+            
+        # Check if RAW_TABLE exists
+        exists = db.run_raw_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{RAW_TABLE}'", fetch='one')
+        if not exists or exists[0] == 0:
+            logger.info(f"Table {RAW_TABLE} does not exist yet. Using placeholders.")
+            raw_data = {}
+        else:
+            raw_ids_str = ','.join(str(id) for id in raw_ids)
+            raw_query = f"""
+                SELECT raw_id, combined_text, link_text, source_handle, received_at
+                FROM {RAW_TABLE}
+                WHERE raw_id IN ({raw_ids_str})
+            """
+            raw_rows = db.run_raw_query(raw_query, fetch='all')
+            raw_data = {row[0]: row for row in raw_rows} if raw_rows else {}
         
         result = []
         for score_row in score_rows:
@@ -96,6 +104,16 @@ def get_unscored_rows(limit=50):
     """Fetch unique, unscored rows from telegram_raw."""
     db = get_db()
     try:
+        # Check if telegram_raw exists first to avoid Catalog Error during startup
+        # (This avoids hitting shared_db.py error logger)
+        try:
+            raw_exists = db.run_raw_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{RAW_TABLE}'", fetch='one')
+            if not raw_exists or raw_exists[0] == 0:
+                logger.info(f"Table '{RAW_TABLE}' not found yet. Skipping unscored rows fetch.")
+                return []
+        except Exception:
+            return []
+
         query = f"""
             SELECT raw_id, source_handle, combined_text, received_at, link_text, image_ocr_text
             FROM {RAW_TABLE}
@@ -116,6 +134,12 @@ def update_raw_as_scored(raw_id):
     """Mark row as scored in telegram_raw."""
     db = get_db()
     try:
+        # Check if RAW_TABLE exists first to avoid Catalog Error
+        exists = db.run_raw_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{RAW_TABLE}'", fetch='one')
+        if not exists or exists[0] == 0:
+             logger.warning(f"Metadata update for {raw_id} skipped: table {RAW_TABLE} not found")
+             return
+             
         db.run_raw_query(f"UPDATE {RAW_TABLE} SET is_scored = TRUE WHERE raw_id = ?", [raw_id])
     except Exception as e:
         logger.error(f"Failed to update raw as scored {raw_id}: {e}")

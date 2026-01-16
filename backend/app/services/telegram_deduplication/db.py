@@ -16,14 +16,19 @@ def ensure_schema():
     try:
         # 1. Fetch existing columns
         try:
-            cols = db.run_raw_query(f"DESCRIBE {RAW_TABLE}", fetch='all')
+            # Check if table exists using information_schema
+            table_exists = db.run_raw_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{RAW_TABLE}'", fetch='one')
+            if not table_exists or table_exists[0] == 0:
+                logger.info(f"Table {RAW_TABLE} does not exist yet. Skipping migration.")
+                return
+
+            cols = db.run_raw_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{RAW_TABLE}'", fetch='all')
             if cols:
                 col_names = [c[0] for c in cols]
             else:
-                return # Table probably doesn't exist
+                return # Should have been caught by table_exists but safe check
         except Exception as e:
-            # Table might not exist yet if listener hasn't run
-            logger.warning(f"Could not describe {RAW_TABLE} (might not exist yet): {e}")
+            logger.warning(f"Could not check schema for {RAW_TABLE}: {e}")
             return
 
         # 2. Add columns if missing
@@ -54,6 +59,15 @@ def get_unprocessed_rows(limit=50):
     """
     db = get_db()
     try:
+        # Check if telegram_raw exists first to avoid Catalog Error during startup
+        try:
+            raw_exists = db.run_raw_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{RAW_TABLE}'", fetch='one')
+            if not raw_exists or raw_exists[0] == 0:
+                logger.info(f"Table '{RAW_TABLE}' not found yet. Skipping unprocessed rows fetch.")
+                return []
+        except Exception:
+            return []
+
         query = f"""
             SELECT raw_id, normalized_text, file_id, received_at 
             FROM {RAW_TABLE} 

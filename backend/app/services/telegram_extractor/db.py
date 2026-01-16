@@ -17,9 +17,11 @@ def ensure_schema():
     # 1. Input DB Migration
     # Use shared connection to avoid file locking
     try:
-        try:
+        # Check if table exists first
+        exists = db.run_listing_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{INPUT_TABLE}'", fetch='one')
+        if exists and exists[0] > 0:
             # Check if columns exist
-            cols = db.run_listing_query(f"DESCRIBE {INPUT_TABLE}", fetch='all')
+            cols = db.run_listing_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{INPUT_TABLE}'", fetch='all')
             if cols:
                 col_names = [c[0] for c in cols]
                 
@@ -38,10 +40,10 @@ def ensure_schema():
                     except Exception as e:
                         if "already exists" not in str(e).lower():
                             logger.warning(f"Failed to add extracted_at: {e}")
-        except Exception as e:
-            logger.error(f"Input DB Schema Migration error: {e}")
+        else:
+            logger.info(f"Input table {INPUT_TABLE} does not exist yet. Skipping input migration.")
     except Exception as e:
-        logger.warning(f"Input DB Schema Migration skipped: {e}")
+        logger.warning(f"Input DB Schema Migration error (non-fatal): {e}")
 
     # 2. Output DB Creation
     try:
@@ -75,7 +77,13 @@ def ensure_schema():
         
         # Migration for existing table
         try:
-            cols = db.run_raw_query(f"DESCRIBE {OUTPUT_TABLE}", fetch='all')
+            # Check if table exists
+            table_exists = db.run_raw_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{OUTPUT_TABLE}'", fetch='one')
+            if not table_exists or table_exists[0] == 0:
+                logger.info(f"Table {OUTPUT_TABLE} does not exist yet. Skipping migration.")
+                return
+
+            cols = db.run_raw_query(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{OUTPUT_TABLE}'", fetch='all')
             col_names = [c[0] for c in cols]
             
             # Helper to add column if not exists
@@ -155,6 +163,11 @@ def get_recent_extractions(limit=50):
     try:
         db = get_shared_db()
         try:
+            # Check if table exists before querying
+            exists = db.run_raw_query(f"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '{OUTPUT_TABLE}'", fetch='one')
+            if not exists or exists[0] == 0:
+                return []
+
             query = f"""
             SELECT 
                 raw_id, telegram_chat_id, telegram_msg_id, source_handle, 

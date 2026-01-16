@@ -89,6 +89,11 @@ if %errorlevel% equ 0 (
 )
 
 echo.
+echo [INFO] Proactively cleaning up WAL files...
+del /s /q "data\*.wal" >nul 2>&1
+echo [OK] WAL files cleared
+
+echo.
 echo ========================================
 echo All servers stopped
 echo ========================================

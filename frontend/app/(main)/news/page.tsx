@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { newsAPI } from '@/lib/api'
 import { useNewsWebSocket, NewsItem } from '@/lib/useNewsWebSocket'
-import { Radio, ExternalLink, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sparkles, ArrowRight, ArrowUp, X, Search } from 'lucide-react'
+import { Radio, ExternalLink, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sparkles, ArrowRight, ArrowUp, X, Search, Layers } from 'lucide-react'
 
 // Helper for date formatting: MMM-DD-YYYY, 12hrs IST
 const formatDate = (dateStr?: string) => {
@@ -132,6 +132,14 @@ const NewsCard = memo(function NewsCard({ item, onSeen }: { item: NewsItem; onSe
                                 );
                             })()}
 
+                            {/* Multiple Sources Badge */}
+                            {item.source_count && item.source_count > 1 && (
+                                <div className="flex-shrink-0 flex items-center gap-1 text-[9px] font-bold text-text-tertiary bg-panel-header/50 px-1.5 py-0.5 rounded border border-white/5" title={item.additional_sources ? `Sources: ${item.additional_sources.join(', ')}` : ''}>
+                                    <Layers className="w-2.5 h-2.5" />
+                                    <span>{item.source_count} SOURCES</span>
+                                </div>
+                            )}
+
                             {/* Source Link - after impact badge */}
                             {item.url && (
                                 <a
@@ -257,31 +265,71 @@ export default function NewsPage() {
 
         // Update news list ONLY if on page 1
         setNews(prev => {
-            if (currentPage !== 1) return prev
+            // Split batch into new items and updates
+            const newItems: NewsItem[] = [];
+            const updates: Map<number, NewsItem> = new Map();
 
-            // Filter out existing news items (just in case) and add new ones
-            const existingIds = new Set(prev.map(item => item.news_id))
-            const newItems = batch.filter(item => !existingIds.has(item.news_id))
+            batch.forEach(item => {
+                // If explicitly marked as update OR we already have this ID in current view
+                if (item.event_type === 'update_news') {
+                    updates.set(item.news_id, item);
+                } else {
+                    newItems.push(item);
+                }
+            });
 
-            if (newItems.length === 0) return prev
-            return [...newItems, ...prev].slice(0, 100)
+            // 1. Handle Updates (In-place modification)
+            let updatedList = [...prev];
+            if (updates.size > 0) {
+                updatedList = updatedList.map(existingItem => {
+                    if (updates.has(existingItem.news_id)) {
+                        const update = updates.get(existingItem.news_id)!;
+                        // Merge existing with update fields
+                        return { ...existingItem, ...update };
+                    }
+                    return existingItem;
+                });
+            }
+
+            if (currentPage !== 1) return updatedList;
+
+            // 2. Handle New Items
+            if (newItems.length === 0) return updatedList;
+
+            // Filter out items that we already have AND duplicates within the incoming batch itself
+            const existingIds = new Set(updatedList.map(n => n.news_id))
+            const uniqueInBatch = new Map<number, NewsItem>();
+
+            newItems.forEach(item => {
+                if (!existingIds.has(item.news_id) && !uniqueInBatch.has(item.news_id)) {
+                    uniqueInBatch.set(item.news_id, item);
+                }
+            });
+
+            const uniqueNewItems = Array.from(uniqueInBatch.values());
+
+            if (uniqueNewItems.length === 0) return updatedList
+
+            if (scrolled) {
+                // Determine actually unseen items
+                const trulyNewIds = uniqueNewItems.map(n => n.news_id)
+                setUnseenIds(prevUnseen => {
+                    const next = new Set(prevUnseen)
+                    trulyNewIds.forEach(id => next.add(id))
+                    return next
+                })
+                setIsScrolledDown(true)
+                setShowNotification(true)
+                // Don't modify list if scrolled, but we applied updates above
+                return updatedList
+            }
+
+            // Normal flow: Prepend new items
+            return [...uniqueNewItems, ...updatedList].slice(0, pageSizeRef.current)
         })
 
-        // Always update total for pagination summary
-        setTotal(prev => prev + batch.length)
-        setLastUpdated(new Date())
-
-        // Show notification if:
-        // 1. Scrolled down on Page 1
-        // 2. Anywhere on Page 2+
-        if ((scrolled && currentPage === 1) || currentPage > 1) {
-            setUnseenIds(prev => {
-                const next = new Set(prev)
-                batch.forEach(item => next.add(item.news_id))
-                return next
-            })
-            setShowNotification(true)
-        }
+        // Update total count
+        setTotal(prev => prev + batch.filter(i => i.event_type !== 'update_news').length)
     })
 
     // Scroll listener to clear notifications when user reaches top of Page 1

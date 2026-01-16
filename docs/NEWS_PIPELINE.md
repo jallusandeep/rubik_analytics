@@ -88,6 +88,15 @@ graph TD
 * **Functionality**:
     *   **Context Injection**: Injects the news text into a structured prompt.
     *   **Information Extraction**: Extract category, sub-type, company name, ticker, exchange, headline, summary, and sentiment.
+    *   **Time-Window Deduplication & Merging**:
+        *   Checks `final_news` for similar content within the last **60 minutes**.
+        *   Uses **Hybrid Similarity**: Headline (Levenshtein) + Content (Word Overlap) + Entities > 80%.
+        *   **Duplicate Storage**: If a duplicate is found, it is saved in the database with `is_duplicate=TRUE` and `duplicate_of_id=ORIGINAL_ID`. **It is NOT shown as a duplicate card.**
+        *   **Merging Strategy**: 
+            *   The *Original* (first) news item is treated as the primary source.
+            *   When a duplicate arrives, the system *updates* the original item's `source_count` and adds the new source handle to `additional_sources`.
+            *   **Source Links**: The News Card preserves the **URL of the first source** (fastest provider) as the main link. Secondary sources are acknowledged via the "Reported by X Sources" badge, but their specific URLs are consolidated to keep the UI clean.
+    *   **Content Validation**: Explicitly drops news with `summary` length < 50 characters to prevent empty cards.
     *   **Structured Storage**: Saves the enriched data to `news_ai.duckdb` for downstream use in signals and dashboards.
 
 #### Scoring Components (The "Brain")
@@ -100,6 +109,27 @@ The final score (`0-100`) is the sum of four components. A score of **25 or high
 | **2. Keywords** | Scans for specific stock signals. <br>• **+10** for each Category Matched (see below). <br>• **-20** (Penalty) if Spam Keywords found. | **35** |
 | **3. Source** | Trusted financial outlets get a priority boost. <br>• **+5** for Trusted Sources (Reuters, Bloomberg, NSE, BSE, etc.) <br>• **0** for Unknown/General sources. | **5** |
 | **4. Content** | Rewards richness of data format. <br>• Text + Link: **+25** (Gold Standard) <br>• Text Only: **+20** <br>• Image (OCR) Only: **+15** | **25** |
+
+### Stage 6: Real-time Delivery (WebSocket)
+* **Goal**: Deliver updates instantly to the frontend ( < 500ms latency).
+* **Mechanism**: WebSocket broadcast with duplicate prevention.
+* **Message Types**:
+    *   `new_news`: A fresh, unique news item. Frontend prepends this to the feed.
+    *   `update_news`: A duplicate was detected. Frontend updates existing card (Source Count ++).
+*   **Drift Prevention**: Tracks recently broadcast IDs per connection to prevent double-posting on page refresh.
+
+### Stage 7: Stability & Concurrency
+
+The system employs a rigorous stability model to handle concurrent access between the high-throughput AI worker (Writer) and the API server (Reader):
+
+1.  **Shared Database Handling (DuckDB)**:
+    *   **Worker Process**: Validates and acquires the **Write Lock** for `final_news.duckdb`. It has exclusive write access.
+    *   **API Server**: Attempts to acquire a lock. If the database is locked by the worker, it automatically gracefully falls back to **READ-ONLY mode**. This ensures the UI never hangs or crashes even during heavy ingestion.
+    *   **Corruption Prevention**: The system distinguishes between "File Locked" errors (normal concurrency) and "WAL Corruption" (file integrity). It only triggers database recovery/wipe on proven corruption validation.
+
+2.  **In-Memory Deduplication Cache**:
+    *   To prevent race conditions where multiple workers (or rapid concurrent batches) might process duplicate news before the database commits, an ephemeral **In-Memory Cache** tracks fingerprints (MD5 of headlines) of recently processed items.
+    *   This dual-layer check (Memory + DB) ensures zero duplicate broadcasts even under high load.
 
 ---
 

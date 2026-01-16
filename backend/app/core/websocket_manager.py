@@ -35,6 +35,10 @@ class WebSocketManager:
 
         await websocket.accept()
         
+        # Ensure this physical connection is not already registered elsewhere
+        # This prevents duplicate broadcasts if the connection is re-associated
+        self.disconnect(websocket)
+        
         if user_id not in self.active_connections:
             self.active_connections[user_id] = set()
         
@@ -124,27 +128,56 @@ class WebSocketManager:
 
     async def broadcast_news(self, news_item: dict):
         """Broadcast a new AI-enriched news item to all connected clients"""
+        # Determine message type (new vs update)
+        msg_type = news_item.get("type", "news_update") if "type" in news_item else "news_update"
+        
         message = {
-            "type": "news_update",
-            "event": "new_news",
+            "type": "news_update", # Keep top-level type consistent for frontend handler
+            "event": msg_type,     # Use event field for specific type (new_news vs update_news)
             "data": news_item
         }
         
         # Broadcast to all connected clients
         count = 0
         disconnected = set()
+        sent_to = set() # Track connections within this broadcast to avoid duplicates
+        news_id = news_item.get('news_id')
+        
         # Use list() to avoid "dictionary changed size during iteration"
         for user_connections in list(self.active_connections.values()):
             for connection in list(user_connections):
+                if connection in sent_to:
+                    continue
+                    
                 try:
+                    # Duplicate Prevention: Check if already sent recently to this connection
+                    # We store recent broadcasts in a temporary attribute on the websocket object
+                    if not hasattr(connection, 'recent_broadcasts'):
+                        connection.recent_broadcasts = set()
+                        
+                    # Clean up old entries (simple approach: clear if too big)
+                    if len(connection.recent_broadcasts) > 100:
+                        connection.recent_broadcasts.clear()
+                        
+                    # Skip if already sent (only for new_news, allowed for update_news)
+                    if msg_type == "new_news" and news_id in connection.recent_broadcasts:
+                        sent_to.add(connection)
+                        continue
+                        
                     await connection.send_json(message)
+                    sent_to.add(connection)
+                    
+                    # Track this broadcast
+                    if news_id:
+                        connection.recent_broadcasts.add(news_id)
+                        
                     count += 1
                 except Exception as e:
                     print(f"[WebSocket] Error broadcasting news: {e}")
                     disconnected.add(connection)
         
         if count > 0:
-            print(f"[WebSocket] Broadcasted news {news_item.get('news_id')} to {count} connections")
+            print(f"[WebSocket] Broadcasted news {news_id} ({msg_type}) to {count} connections")
         
         # Clean up disconnected connections
         for connection in disconnected:
@@ -163,11 +196,19 @@ class WebSocketManager:
                     loop = asyncio.get_event_loop()
                 except:
                     pass
-                    
+            
             if loop and loop.is_running():
+                # Correctly schedule the coroutine in the running loop
                 asyncio.run_coroutine_threadsafe(self.broadcast_news(news_item), loop)
             else:
-                print(f"[WebSocket] No running loop found for sync broadcast of news {news_item.get('news_id')}")
+                # If no loop is running (rare in FastAPI context), try to run it directly
+                # This might fail if we are not in an async context
+                try:
+                    loop = asyncio.new_event_loop()
+                    loop.run_until_complete(self.broadcast_news(news_item))
+                except Exception as e:
+                    print(f"[WebSocket] Failed to broadcast sync (no loop): {e}")
+                    
         except Exception as e:
             print(f"[WebSocket] Error in broadcast_news_sync: {e}")
             pass
