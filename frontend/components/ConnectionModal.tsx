@@ -17,12 +17,10 @@ interface ConnectionModalProps {
 }
 
 const CONNECTION_TYPES = [
-    { value: 'MARKET_DATA', label: 'Market Data' },
+    { value: 'INTERNAL', label: 'Internal System' },
     { value: 'BROKER', label: 'Broker / Trading' },
     { value: 'AI_ML', label: 'AI / ML Model' },
-    { value: 'NEWS', label: 'News & Events' },
     { value: 'SOCIAL', label: 'Social / Sentiment' },
-    { value: 'INTERNAL', label: 'Internal System' },
     { value: 'TELEGRAM_BOT', label: 'Telegram Bot' },
     { value: 'TELEGRAM_USER', label: 'Telegram User' },
 ]
@@ -43,7 +41,7 @@ export function ConnectionModal({ isOpen, onClose, connection, onUpdate, categor
 
     const [formData, setFormData] = useState({
         name: '',
-        connection_type: category === 'SOCIAL' ? 'TELEGRAM_BOT' : 'MARKET_DATA',
+        connection_type: category === 'SOCIAL' ? 'TELEGRAM_BOT' : 'INTERNAL',
         provider: '',
         description: '',
         environment: 'PROD',
@@ -176,7 +174,7 @@ export function ConnectionModal({ isOpen, onClose, connection, onUpdate, categor
     const resetForm = () => {
         setFormData({
             name: '',
-            connection_type: category === 'SOCIAL' ? 'TELEGRAM_BOT' : 'MARKET_DATA',
+            connection_type: category === 'SOCIAL' ? 'TELEGRAM_BOT' : 'INTERNAL',
             provider: '',
             description: '',
             environment: 'PROD',

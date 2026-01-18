@@ -51,6 +51,14 @@ def init_database():
         for table in tables:
             print(f"  - {table}")
         
+        # Initialize IPO Scraper DB
+        from app.services.ipo_scraper.db import ensure_schema as ensure_ipo_schema
+        try:
+             ensure_ipo_schema()
+             print("[OK] IPO DB initialized successfully")
+        except Exception as e:
+             print(f"[ERROR] IPO DB initialization failed: {e}")
+
         print("\n" + "=" * 60)
         print("  DATABASE INITIALIZATION COMPLETE")
         print("=" * 60)

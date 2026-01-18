@@ -371,6 +371,54 @@ export const adminAPI = {
     const response = await api.put(`/admin/ai-enrichment-config/${id}`, data)
     return response.data
   },
+  runIpoScraper: async () => {
+    const response = await api.post('/processors/ipo/run')
+    return response.data
+  },
+  getIpoScraperStatus: async () => {
+    const res = await api.get('/processors/ipo/status')
+    return res.data
+  },
+
+  runBseScraper: async () => {
+    const res = await api.post('/processors/bse-ipo/run')
+    return res.data
+  },
+
+  getBseScraperStatus: async () => {
+    const res = await api.get('/processors/bse-ipo/status')
+    return res.data
+  },
+
+  runGmpScraper: async () => {
+    const res = await api.post('/processors/gmp-ipo/run')
+    return res.data
+  },
+
+  getGmpScraperStatus: async () => {
+    const res = await api.get('/processors/gmp-ipo/status')
+    return res.data
+  },
+
+  setSchedule: async (type: string, hours?: number, payload?: any) => {
+    // If payload is provided, use it directly; otherwise construct from hours
+    const data = payload || { type, schedule_type: 'interval', hours: hours || 24 }
+    const res = await api.post('/processors/schedule', data)
+    return res.data
+  },
+
+  getSchedule: async (type: string) => {
+    const res = await api.get('/processors/schedule', { params: { type } })
+    return res.data
+  },
+
+  cancelSchedule: async (type: string, jobId?: string) => {
+    const params: any = { type }
+    if (jobId) params.job_id = jobId
+    const res = await api.delete('/processors/schedule', { params })
+    return res.data
+  },
+
 }
 
 

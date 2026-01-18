@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
+from telethon.tl.types import MessageEntityTextUrl, MessageEntityUrl
 
 from .db import insert_message, get_last_msg_id
 
@@ -311,15 +312,27 @@ class TelegramListener:
                 if hasattr(checkout, 'file_name'):
                     file_name = checkout.file_name
 
-        if msg.entities:
-            for entity in msg.entities:
-                pass
-                
         # Simple extraction combined from text and caption
         full_text = (msg.message or "") + " " + (msg.text or "")
         
-        extracted_urls = re.findall(URL_REGEX, full_text)
-        urls_str = ",".join(list(set(extracted_urls))) if extracted_urls else None
+        extracted_urls = set(re.findall(URL_REGEX, full_text))
+
+        # Extract Rich Text Entities (TextUrl = Blue Headers/Hidden Links)
+        if msg.entities:
+            for entity in msg.entities:
+                if isinstance(entity, MessageEntityTextUrl):
+                    if entity.url:
+                        extracted_urls.add(entity.url)
+                elif isinstance(entity, MessageEntityUrl):
+                    # For simple URL entities, get the substring
+                    # offset and length are in utf-16 code units usually, but python behaves reasonably with slice
+                    try:
+                        url_part = full_text[entity.offset : entity.offset + entity.length]
+                        extracted_urls.add(url_part)
+                    except:
+                        pass
+
+        urls_str = ",".join(list(extracted_urls)) if extracted_urls else None
 
         # Download Media if present (Async)
         file_path = None

@@ -23,7 +23,7 @@ def process_batch():
         # Columns: listing_id, telegram_chat_id, telegram_msg_id, source_handle, message_text, caption_text, media_type, has_media, file_id, file_name, urls, received_at
         query = f"""
             SELECT listing_id, telegram_chat_id, telegram_msg_id, source_handle, 
-                   message_text, caption_text, media_type, has_media, file_id, file_path, received_at
+                   message_text, caption_text, media_type, has_media, file_id, file_path, urls, received_at
             FROM telegram_listing 
             WHERE is_extracted = FALSE 
             ORDER BY received_at ASC 
@@ -41,7 +41,7 @@ def process_batch():
     for row in rows:
         # Unpack
         (listing_id, chat_id, msg_id, handle, 
-         msg_text, cap_text, media_type, has_media, file_id, file_path, received_at) = row
+         msg_text, cap_text, media_type, has_media, file_id, file_path, urls_str, received_at) = row
         
         try:
             # 1. Text Extraction
@@ -51,6 +51,16 @@ def process_batch():
             
             # 2. Link Extraction & Scraping
             found_urls = extract_urls(full_source_text)
+            
+            # Merge with DB URLs (Rich Text Entities)
+            if urls_str:
+                db_urls = [u.strip() for u in urls_str.split(",") if u.strip()]
+                # Add unique new URLs
+                for u in db_urls:
+                    if u not in found_urls:
+                        found_urls.append(u)
+
+            link_texts = []
             link_texts = []
             source_url = found_urls[0] if found_urls else None
             for url in found_urls:

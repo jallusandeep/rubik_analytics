@@ -48,16 +48,16 @@ export function TableRow({
   className = '',
   hover = true,
   index,
-}: TableProps & { hover?: boolean; index?: number }) {
+  onClick,
+}: TableProps & { hover?: boolean; index?: number; onClick?: () => void }) {
   return (
     <tr
-      className={`${
-        index !== undefined && index % 2 === 0 
-          ? 'bg-[#fafafa] dark:bg-[#0e1628]/30' 
-                  : 'bg-[#121b2f]'
-      } ${
-        hover ? 'hover:bg-[#f1f5f9] dark:hover:bg-[#182447]/40 transition-colors duration-200' : ''
-      } ${className}`}
+      onClick={onClick}
+      className={`${index !== undefined && index % 2 === 0
+          ? 'bg-[#fafafa] dark:bg-[#0e1628]/30'
+          : 'bg-[#121b2f]'
+        } ${hover ? 'hover:bg-[#f1f5f9] dark:hover:bg-[#182447]/40 transition-colors duration-200' : ''
+        } ${className}`}
     >
       {children}
     </tr>
@@ -66,7 +66,7 @@ export function TableRow({
 
 export function TableCell({ children, className = '', numeric = false, colSpan }: TableProps & { numeric?: boolean; colSpan?: number }) {
   return (
-    <td 
+    <td
       colSpan={colSpan}
       className={`px-3 py-2 text-sm font-sans text-text-primary dark:text-[#e5e7eb] ${numeric ? 'text-right' : 'text-left'} ${className}`}
     >

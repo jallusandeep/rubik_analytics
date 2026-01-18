@@ -102,10 +102,14 @@ async def configure_logging():
         if not any(isinstance(f, WebSocketLogFilter) for f in logger.filters):
             logger.addFilter(WebSocketLogFilter())
 
-# Initialize database connections on startup
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database connections on startup"""
+    # Start Scheduler
+    try:
+        from app.services.scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        print(f"[WARNING] Failed to start scheduler: {e}")
+
+    # Initialize database connections on startup
     try:
         manager = get_connection_manager(settings.DATA_DIR)
         router = get_db_router(settings.DATA_DIR)
@@ -550,6 +554,13 @@ async def shutdown_event():
         # Symbols module has been removed
         pass
         
+        # Stop Scheduler (Global)
+        try:
+            from app.services.scheduler import stop_scheduler
+            stop_scheduler()
+        except Exception as e:
+            print(f"[WARNING] Error stopping global scheduler: {e}")
+
         # Stop Scheduler Service
         try:
             from app.services.scheduler_service import get_scheduler_service

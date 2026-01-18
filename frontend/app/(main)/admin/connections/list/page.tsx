@@ -158,9 +158,7 @@ function ConnectionListContent() {
         const labels: Record<string, string> = {
             'INTERNAL': 'Database Connections',
             'BROKER': 'Broker APIs',
-            'NEWS': 'News Channels',
             'SOCIAL': 'Telegram',
-            'MARKET_DATA': 'Market Data',
             'AI_ML': 'AI / ML Models',
             'TRUEDATA': 'TrueData'
         }

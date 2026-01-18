@@ -441,9 +441,44 @@ class SharedDatabase:
                 # ai_queue
                 conn.execute(f"DELETE FROM ai_queue WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '{hours}' HOUR")
 
+            # 4. File Cleanup (Caches)
+            from app.services.telegram_extractor.config import LINK_CACHE_DIR, OCR_CACHE_DIR, DATA_DIR
+            MEDIA_DIR = os.path.join(DATA_DIR, "media_cache")
+            
+            self._cleanup_directory(LINK_CACHE_DIR, hours)
+            self._cleanup_directory(OCR_CACHE_DIR, hours)
+            self._cleanup_directory(MEDIA_DIR, hours)
+
             logger.info("Pipeline-wide cleanup completed successfully.")
         except Exception as e:
             logger.error(f"Pipeline cleanup failed: {e}")
+
+    def _cleanup_directory(self, directory, hours):
+        """Helper to delete files older than X hours in a directory."""
+        if not os.path.exists(directory):
+            return
+            
+        now = time.time()
+        cutoff = now - (hours * 3600)
+        
+        count = 0
+        try:
+            for filename in os.listdir(directory):
+                filepath = os.path.join(directory, filename)
+                if os.path.isfile(filepath):
+                    # Check modification time
+                    if os.path.getmtime(filepath) < cutoff:
+                        try:
+                            os.remove(filepath)
+                            count += 1
+                        except Exception as e:
+                            logger.error(f"Failed to delete {filepath}: {e}")
+            
+            if count > 0:
+                logger.info(f"Cleaned up {count} files from {os.path.basename(directory)}")
+        except Exception as e:
+            logger.error(f"Error scanning directory {directory} for cleanup: {e}")
+
 
     def close_all(self):
         with self._lock:

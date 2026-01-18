@@ -112,14 +112,6 @@ export default function ConnectionsPage() {
       icon: TrendingUp,
       color: 'success'
     },
-    NEWS: {
-      total: connections.filter(c => c.connection_type === 'NEWS').length,
-      connected: connections.filter(c => c.connection_type === 'NEWS' && c.status === 'CONNECTED').length,
-      label: 'News Channels',
-      description: 'News feeds and event data sources',
-      icon: Newspaper,
-      color: 'info'
-    },
     SOCIAL: {
       total: connections.filter(c => ['SOCIAL', 'TELEGRAM_BOT', 'TELEGRAM_USER'].includes(c.connection_type)).length,
       connected: connections.filter(c => ['SOCIAL', 'TELEGRAM_BOT', 'TELEGRAM_USER'].includes(c.connection_type) && c.status === 'CONNECTED').length,
@@ -127,14 +119,6 @@ export default function ConnectionsPage() {
       description: 'Telegram, social media, and messaging integrations',
       icon: MessageSquare,
       color: 'warning'
-    },
-    MARKET_DATA: {
-      total: connections.filter(c => c.connection_type === 'MARKET_DATA').length,
-      connected: connections.filter(c => c.connection_type === 'MARKET_DATA' && c.status === 'CONNECTED').length,
-      label: 'Market Data',
-      description: 'Real-time market data providers',
-      icon: BarChart3,
-      color: 'primary'
     },
     AI_ML: {
       total: connections.filter(c => c.connection_type === 'AI_ML').length,
@@ -163,9 +147,7 @@ export default function ConnectionsPage() {
   const connectionCategories = [
     { key: 'INTERNAL' as const, ...categoryStats.INTERNAL },
     { key: 'BROKER' as const, ...categoryStats.BROKER },
-    { key: 'NEWS' as const, ...categoryStats.NEWS },
     { key: 'SOCIAL' as const, ...categoryStats.SOCIAL },
-    { key: 'MARKET_DATA' as const, ...categoryStats.MARKET_DATA },
     { key: 'AI_ML' as const, ...categoryStats.AI_ML },
     trueDataCategory,
   ]
@@ -258,9 +240,7 @@ export default function ConnectionsPage() {
                 <p className="text-sm font-sans text-text-secondary dark:text-[#9ca3af] mb-4">
                   {category.key === 'INTERNAL' && 'Manage database connections for authentication, analytics, and reference data.'}
                   {category.key === 'BROKER' && 'Configure trading platforms and broker API integrations for automated trading.'}
-                  {category.key === 'NEWS' && 'Connect to news feeds and event data sources for market analysis.'}
                   {category.key === 'SOCIAL' && 'Integrate with messaging platforms and social media for sentiment analysis.'}
-                  {category.key === 'MARKET_DATA' && 'Real-time market data providers.'}
                   {category.key === 'AI_ML' && 'Configure AI and machine learning model endpoints (Ollama, Gemini, Perplexity).'}
                   {category.key === 'TRUEDATA' && 'Configure TrueData as a central token provider. Tokens are generated and refreshed automatically.'}
                 </p>

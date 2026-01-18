@@ -5,10 +5,8 @@ from app.core.database import Base
 import enum
 
 class ConnectionType(str, enum.Enum):
-    MARKET_DATA = "MARKET_DATA"
     BROKER = "BROKER"
     AI_ML = "AI_ML"
-    NEWS = "NEWS"
     SOCIAL = "SOCIAL"
     INTERNAL = "INTERNAL"
     TELEGRAM_BOT = "TELEGRAM_BOT"
